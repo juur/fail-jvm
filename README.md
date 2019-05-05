@@ -22,3 +22,5 @@ The following packages have some implemented classes based on the published API 
 * java.nio.charset.spi
 * java.math
 * java.text
+
+Oracle and Java are registered trademarks of Oracle and/or its affiliates. Other names may be trademarks of their respective owners.
