@@ -70,6 +70,9 @@ default:	all
 $(TARGET):	$(OBJS)
 	$(CC) -o $(TARGET) $(OBJS) $(LDFLAGS)
 
+%.o:	%.c
+	$(CC) $(CFLAGS) -c $<
+
 count:
 		@cat *.c | sed -n -e '/*runCode/,$$p' | tr -s '[ \n\t]' | sed -e 's,^\t,,' | grep 'case 0x'
 

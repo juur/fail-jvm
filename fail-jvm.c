@@ -99,12 +99,14 @@ const uint8_t atypemap[T_MAX] = {
 
 /* value of .tag */
 
+
 #define CONSTANT_Class				7
 #define CONSTANT_Double				6
 #define CONSTANT_Fieldref			9
+#define CONSTANT_Float				4
+#define CONSTANT_Integer			3
 #define CONSTANT_InterfaceMethodref	11
 #define CONSTANT_InvokeDynamic		18
-#define CONSTANT_Float				4
 #define CONSTANT_Long				5
 #define CONSTANT_MethodHandle		15
 #define CONSTANT_MethodType			16
@@ -112,7 +114,6 @@ const uint8_t atypemap[T_MAX] = {
 #define CONSTANT_NameAndType		12
 #define CONSTANT_String				8
 #define CONSTANT_Utf8				1
-#define CONSTANT_Integer			3
 
 struct _cp_info;
 
@@ -187,20 +188,21 @@ typedef struct {
 } cp_Fieldref_info;
 
 typedef struct _cp_info {
-	uint8_t		tag;
+	uint8_t	tag;
+
 	union {
-		cp_Utf8_info utf8;
-		cp_MethodHandle_info mh;
-		cp_MethodType_info mt;
-		cp_NameAndType_info nt;
-		cp_InvokeDynamic_info id;
-		cp_Long_info tlong;
-		cp_Integer_info tint;
-		cp_Float_info tfloat;
-		cp_Double_info tdouble;
-		cp_String_info str;
-		cp_Class_info class;
-		cp_Fieldref_info fr;
+		cp_Utf8_info			utf8;
+		cp_MethodHandle_info	mh;
+		cp_MethodType_info		mt;
+		cp_NameAndType_info		nt;
+		cp_InvokeDynamic_info	id;
+		cp_Long_info			tlong;
+		cp_Integer_info			tint;
+		cp_Float_info			tfloat;
+		cp_Double_info			tdouble;
+		cp_String_info			str;
+		cp_Class_info			class;
+		cp_Fieldref_info		fr;
 	} d;
 } cp_info;
 
@@ -221,9 +223,9 @@ enum std_attr_e {
 };
 
 struct predefinedAttribute {
-	const enum std_attr_e attr;
-	const char *name;
-	const size_t size;
+	const enum std_attr_e	 attr;
+	const char				*name;
+	const size_t			 size;
 };
 
 struct _ClassFile;
@@ -245,10 +247,10 @@ typedef struct {
 	uint16_t	inner_name_index;
 	uint16_t	inner_class_access_flags;
 
-	const cp_info		*inner_ci;
-	const cp_info		*outer_ci;
+	const cp_info			*inner_ci;
+	const cp_info			*outer_ci;
 	const struct _ClassFile	*inner_class;
-	const cp_info		*inner_name;
+	const cp_info			*inner_name;
 } inner_class_def;
 
 typedef struct {
@@ -257,7 +259,7 @@ typedef struct {
 } InnerClasses_attribute;
 
 typedef struct {
-	uint16_t			 sourcefile_index;
+	uint16_t		 sourcefile_index;
 	const cp_info	*name;
 } SourceFile_attribute;
 
@@ -291,9 +293,9 @@ typedef struct {
 } ConstantValue_attribute;
 
 typedef struct {
-	uint16_t	 bootstrap_method_ref;
-	uint16_t	 num_bootstrap_arguments;
-	uint16_t	*bootstrap_arguments;
+	uint16_t		 bootstrap_method_ref;
+	uint16_t		 num_bootstrap_arguments;
+	const uint16_t	*bootstrap_arguments;
 } bootstrap_method;
 
 typedef struct {
@@ -402,6 +404,7 @@ typedef struct {
 
 typedef struct {
 	uint16_t		  number_of_entries;
+
 	stack_map_frame	**entries;
 } StackMapTable_attribute;
 
@@ -431,12 +434,14 @@ typedef struct _attribute_info {
 typedef struct {
 	uint8_t	 baseType;
 	uint8_t	 array;
+
 	const char	*className;
 } des_Field;
 
 typedef struct {
 	des_Field	  ret;
 	uint16_t	  num_params;
+
 	const des_Field	**params;
 } des_Method;
 
@@ -449,6 +454,7 @@ typedef struct {
 	uint16_t		name_index;
 	uint16_t		descriptor_index;
 	uint16_t		attributes_count;
+
 	const attribute_info	**attributes;
 
 	des_Field		 desc;
@@ -466,7 +472,8 @@ struct _Object;
 
 typedef struct _Operand *(*intStaticMethod)(struct _Thread *, 
 		const struct _ClassFile *);
-typedef struct _Operand *(*intMethod)(struct _Thread *, const struct _ClassFile *, 
+typedef struct _Operand *(*intMethod)(struct _Thread *, 
+		const struct _ClassFile *, 
 		struct _Object *o);
 
 typedef struct _method_info {
@@ -510,7 +517,7 @@ typedef struct _ClassFile {
 	uint16_t			  methods_count;
 	const method_info	**methods;
 	uint16_t			  attributes_count;
-	attribute_info		**attributes;
+	const attribute_info **attributes;
 
 	const cp_info		 *this_class;
 	const cp_info		 *super_class;
@@ -563,7 +570,6 @@ typedef struct _Object {
 
 #define	MAX_STACK	500
 
-
 uint32_t framecounter = 0;
 
 typedef struct {
@@ -577,7 +583,7 @@ typedef struct {
 
 	const ClassFile		*class;
 	const method_info	*mi;
-	const Operand		*stack[];
+	const Operand		**stack;
 } Frame;
 
 enum th_state_en {
@@ -626,12 +632,12 @@ typedef struct {
 } internalField;
 
 typedef struct {
-	const char *name;
-	const char *desc;
-	const uint16_t access;
+	const char		*name;
+	const char		*desc;
+	const uint16_t	 access;
 	union {
-		intStaticMethod mstatic;
-		intMethod mvirtual;
+		intStaticMethod	mstatic;
+		intMethod		mvirtual;
 	} meth;
 } internalMethod;
 
@@ -656,16 +662,15 @@ typedef struct {
  */
 
 static struct predefinedAttribute predefinedAttrs[] = {
-	{ATTR_CONSTANT_VALUE,	"ConstantValue",	sizeof(ConstantValue_attribute)},
-	{ATTR_CODE,				"Code",				sizeof(Code_attribute)},
-	{ATTR_STACKMAPTABLE,	"StackMapTable",	sizeof(StackMapTable_attribute)},
-	{ATTR_EXCEPTIONS,		"Exceptions",		sizeof(Exceptions_attribute)},
-	{ATTR_BOOTSTRAPMETHODS, "BootstrapMethods",	sizeof(BootstrapMethods_attribute)},
-	{ATTR_INNERCLASSES,		"InnerClasses",		sizeof(InnerClasses_attribute)},
-	{ATTR_SOURCEFILE,		"SourceFile",		sizeof(SourceFile_attribute)},
-	{ATTR_LINENUMBERTABLE,	"LineNumberTable",	sizeof(LineNumberTable_attribute)},
-
-	{0, NULL, 0},
+{ATTR_CONSTANT_VALUE,	"ConstantValue",	sizeof(ConstantValue_attribute)},
+{ATTR_CODE,				"Code",				sizeof(Code_attribute)},
+{ATTR_STACKMAPTABLE,	"StackMapTable",	sizeof(StackMapTable_attribute)},
+{ATTR_EXCEPTIONS,		"Exceptions",		sizeof(Exceptions_attribute)},
+{ATTR_BOOTSTRAPMETHODS, "BootstrapMethods",	sizeof(BootstrapMethods_attribute)},
+{ATTR_INNERCLASSES,		"InnerClasses",		sizeof(InnerClasses_attribute)},
+{ATTR_SOURCEFILE,		"SourceFile",		sizeof(SourceFile_attribute)},
+{ATTR_LINENUMBERTABLE,	"LineNumberTable",	sizeof(LineNumberTable_attribute)},
+{0, NULL, 0},
 };
 
 static prim_class_map_t primitiveClassMap[] = {
@@ -1129,35 +1134,54 @@ fail:
 
 static Frame *newFrame(const uint32_t num_stacks, const uint32_t num_locals)
 {
-	Frame *ret = calloc(1, sizeof(Frame) + (sizeof(Operand) * num_stacks));
-	if (ret == NULL) 
-		err(EXIT_FAILURE, "newFrame");
+	Frame *ret = calloc(1, sizeof(Frame));
+
+	if (ret == NULL) {
+		warn("newFrame");
+		goto fail;
+	}
 
 	ret->frameNum = framecounter++;
 	ret->num_stack = umax(1,num_stacks);
 	ret->num_local = umax(1,num_locals);
 
-	if ((ret->local = calloc(ret->num_local, sizeof(Operand *))) == NULL)
-		err(EXIT_FAILURE, "newFrame");
+	if ((ret->stack = calloc(num_stacks, sizeof(Operand))) == NULL) {
+		warn("newFrame");
+		goto fail;
+	}
+
+	if ((ret->local = calloc(ret->num_local, sizeof(Operand *))) == NULL) {
+		warn("newFrame");
+		goto fail;
+	}
 
 	return ret;
+
+fail:
+	if (ret) {
+		if (ret->local) free(ret->local);
+		if (ret->stack) free(ret->stack);
+		free(ret);
+	}
+	return NULL;
 }
 
 static void freeFrame(Frame *f)
 {
 	if (f->local) { 
 		for (uint16_t i = 0; i < f->num_local; i++)
-		{
 			clearAndFreeLocal(f, i);
-		}
+
 		free(f->local); 
 		f->local = NULL;
 	}
+
 	for (uint32_t i = 0; i < f->sp; i++)
 	{
 		if (f->stack[i])
 			freeOperand((Operand *)f->stack[i]);
 	}
+
 	free(f);
 }
 
