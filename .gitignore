@@ -1,0 +1,6 @@
+*.o
+*.class
+/fail-jvm
+/.classpath
+/.cproject
+/.project
