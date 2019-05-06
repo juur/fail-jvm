@@ -568,15 +568,14 @@ typedef struct _Object {
 	} data;
 } Object;
 
-#define	MAX_STACK	500
 
-uint32_t framecounter = 0;
+uint16_t framecounter = 0;
 
 typedef struct {
-	uint32_t	  frameNum;
-	uint32_t	  sp;
-	uint32_t	  num_local;
-	uint32_t	  num_stack;
+	uint16_t	  frameNum;
+	uint16_t	  sp;
+	uint16_t	  num_local;
+	uint16_t	  num_stack;
 	uint32_t	  pc;
 	Operand		 *ret;
 	Operand		**local;
@@ -586,44 +585,47 @@ typedef struct {
 	const Operand		**stack;
 } Frame;
 
-enum th_state_en {
+typedef enum _th_state_en {
 	TH_NEW,
 	TH_RUNNING,
 	TH_FINISHED,
 	TH_DEAD
-};
+} th_state_en;
+
+#define MAX_THREADS	16
+#define	MAX_STACK	1024
+#define MAX_HEAP	2048
+#define MAX_METHOD	256
 
 typedef struct _Thread {
-	uint32_t	 pc;
-	uint32_t	 frame_free;
-	Frame		*stack[MAX_STACK];
-	pthread_t	 pthread;
-	uint16_t	 thread_id;
-	Object		*thread;
+	Frame			*stack[MAX_STACK];
+	Object			*thread;
+	uint32_t		 pc;
+	uint32_t		 frame_free;
+	pthread_t		 pthread;
+	uint16_t		 thread_id;
+	th_state_en		 state;
 
-	pthread_rwlock_t	rwlock;
+	pthread_rwlock_t	 rwlock;
 	const struct _JVM	*jvm;
 	const method_info	*cur_method;
-	enum th_state_en	 state;
 } Thread;
-
-#define MAX_THREADS	10
 
 typedef struct _JVM {
 	pthread_rwlock_t	rwlock;
 	bool			 VM;
 	bool			 ClassInit;
 	Thread			*cur_thread;
-	Object			*heap[MAX_STACK];
-	const ClassFile	*method_area[MAX_STACK];
+	Object			*heap[MAX_HEAP];
+	const ClassFile	*method_area[MAX_METHOD];
 	Thread			*threads[MAX_THREADS];
 } JVM;
 
 /* hard coded classes */
 
-#define MAX_FIELDS		20
-#define MAX_METHODS		20
-#define MAX_INTERFACES	5
+#define MAX_FIELDS		16
+#define MAX_METHODS		16
+#define MAX_INTERFACES	16
 
 typedef struct {
 	const char *name;
@@ -706,7 +708,7 @@ static const ClassFile *findClass2(Thread *, const char *, const bool);
 static Operand *throw(Thread *, const char *, const char *, int64_t pc);
 static Operand *startThread(Thread *);
 static Thread *newThread(JVM *, Object *);
-static ClassFile *loadClass(Thread *, const char *restrict);
+static ClassFile *loadClass(Thread *, const char *);
 static Object *newArray(Thread *, const uint8_t, const uint32_t, const ClassFile *);
 static Object *newObject(Thread *, const ClassFile *);
 static Operand *dupOperand(const Operand *);
@@ -722,7 +724,7 @@ static Object *createClass(Thread *, ClassFile *);
 
 #ifdef DEBUG
 const char *printObject(const Object *o);
-void dumpClass(const ClassFile *restrict);
+void dumpClass(const ClassFile *);
 void dumpFrame(const Frame *f);
 void dumpStack(const Frame *frame, const char *op);
 void disasm(const uint8_t *code, const uint32_t len);
@@ -734,18 +736,18 @@ ClassFile *buildInternalClass(const internalClass *ic);
  */
 
 /*
-static inline int max(const int a, const int b)
+static int max(const int a, const int b)
 {
 	return a < b ? b : a;
 }
 */
 
-static inline unsigned int umax(const unsigned int a, const unsigned int b)
+static unsigned int umax(const unsigned int a, const unsigned int b)
 {
 	return a < b ? b : a;
 }
 
-static inline Frame *currentFrame(Thread *thread)
+static Frame *currentFrame(Thread * thread)
 {
 	if (thread->frame_free == 0) return NULL;
 	return thread->stack[thread->frame_free-1];
@@ -855,52 +857,38 @@ void dumpStack(const Frame *frame, const char *op)
 }
 #endif
 
-static bool push(Frame *frame, const Operand *op)
+static bool push(Frame * frame, const Operand * op)
 {
-	if (op == NULL) {
-		warnx("push: null Operand");
+	assert(op != 0);
+	assert(op->type != 0);
+
+	if (frame->sp >= frame->num_stack) 
 		return false;
-	} else if (frame->sp >= frame->num_stack) {
-		printf(" push\t<<FULL>>\n");
-		//__asm__("int $3");
-		return false;
-	} else {
-		if (op->type == 0) {
-			warnx("push: bad type");
-			__asm__("int $3");
-		}
-		frame->stack[frame->sp++] = op;
-		return true;
-	}
+
+	frame->stack[frame->sp++] = op;
+	return true;
 }
 
-static Operand *pop(Frame *frame)
+static Operand *pop(Frame * frame)
 {
-	if (frame->sp == 0) {
-		printf(" pop\t<<EMPTY>>\n");
-		//__asm__("int $3");
-		return NULL;
-	} else {
-		Operand *ret = (Operand *)frame->stack[--frame->sp];
-		frame->stack[frame->sp] = NULL;
-		return ret;
-	}
+	assert(frame->sp > 0);
+	Operand *ret = (Operand *)frame->stack[--frame->sp];
+	frame->stack[frame->sp] = NULL;
+	return ret;
 }
 
-static Operand *getLocal(Frame *frame, uint16_t slot)
+static Operand *getLocal(Frame * frame, const uint16_t slot)
 {
-	if (slot >= frame->num_local) return NULL;
+	assert(slot < frame->num_local);
 	return frame->local[slot];
 }
 
-static void clearAndFreeLocal(Frame *frame, uint16_t slot)
+static void clearAndFreeLocal(Frame *frame, const uint16_t slot)
 {
 	const Operand *value = getLocal(frame, slot);
 	if (value == NULL) return;
 
-	const bool islong = (value->type == TYPE_LONG || value->type == TYPE_DOUBLE);
-
-	if (islong) {
+	if (value->type == TYPE_LONG || value->type == TYPE_DOUBLE) {
 		if (slot-1U < frame->num_local && frame->local[slot-1U] == value) 
 			frame->local[slot-1U] = NULL;
 		else if (slot < frame->num_local-1U && frame->local[slot+1U] == value) 
@@ -911,9 +899,9 @@ static void clearAndFreeLocal(Frame *frame, uint16_t slot)
 	freeOperand((Operand *)value);
 }
 
-static Operand *setLocal(Frame *frame, uint16_t slot, Operand *value)
+static Operand *setLocal(Frame * frame, const uint16_t slot, Operand *value)
 {
-	if (value == NULL || slot > frame->num_local-1) return NULL;
+	if (value == NULL || slot >= frame->num_local) return NULL;
 
 	const bool islong = (value->type == TYPE_LONG || value->type == TYPE_DOUBLE);
 
@@ -950,27 +938,27 @@ static void printAccessFlags(const uint16_t flag, char *buf)
 }
 #endif
 
-inline static bool read4(FILE *f, uint32_t *dst)
+static bool read4(FILE * f, uint32_t * dst)
 {
 	if ( (fread(dst, 1, sizeof(uint32_t), f)) != sizeof(uint32_t)) return false;
 	*dst = ntohl(*dst);
 	return true;
 }
 
-inline static bool read2(FILE *f, uint16_t *dst)
+static bool read2(FILE * f, uint16_t * dst)
 {
 	if ( (fread(dst, 1, sizeof(uint16_t), f)) != sizeof(uint16_t)) return false;
 	*dst = ntohs(*dst);
 	return true;
 }
 
-inline static bool read1(FILE *f, uint8_t *dst)
+static bool read1(FILE * f, uint8_t * dst)
 {
 	if ( (fread(dst, 1, sizeof(uint8_t), f)) != sizeof(uint8_t)) return false;
 	return true;
 }
 
-static Object *findObjForPrim(uint8_t type)
+static Object *findObjForPrim(const uint8_t type)
 {
 	for (ssize_t i = 0; primitiveClassMap[i].c_name; i++)
 		if (primitiveClassMap[i].type == type)
@@ -1132,7 +1120,7 @@ fail:
 	return NULL;
 }
 
-static Frame *newFrame(const uint32_t num_stacks, const uint32_t num_locals)
+static Frame *newFrame(const uint16_t num_stacks, const uint16_t num_locals)
 {
 	Frame *ret = calloc(1, sizeof(Frame));
 
@@ -1142,10 +1130,10 @@ static Frame *newFrame(const uint32_t num_stacks, const uint32_t num_locals)
 	}
 
 	ret->frameNum = framecounter++;
-	ret->num_stack = umax(1,num_stacks);
-	ret->num_local = umax(1,num_locals);
+	ret->num_stack = (uint16_t)umax(1U,num_stacks);
+	ret->num_local = (uint16_t)umax(1U,num_locals);
 
-	if ((ret->stack = calloc(num_stacks, sizeof(Operand))) == NULL) {
+	if ((ret->stack = calloc(num_stacks, sizeof(Operand *))) == NULL) {
 		warn("newFrame");
 		goto fail;
 	}
@@ -1176,10 +1164,12 @@ static void freeFrame(Frame *f)
 		f->local = NULL;
 	}
 
-	for (uint32_t i = 0; i < f->sp; i++)
-	{
-		if (f->stack[i])
-			freeOperand((Operand *)f->stack[i]);
+	if (f->stack) {
+		for (uint16_t i = 0; i < f->sp; i++)
+			if (f->stack[i])
+				freeOperand((Operand *)f->stack[i]);
+		free(f->stack);
+		f->stack = NULL;
 	}
 
 	free(f);
@@ -2027,7 +2017,7 @@ static uint16_t *parseCpUtf8ToUtf16(const uint8_t *src, const uint16_t len, uint
 		return NULL;
 	}
 
-	if ((ret = malloc(len * sizeof(uint16_t))) == NULL) return NULL;
+	if ((ret = malloc((int)len * sizeof(uint16_t))) == NULL) return NULL;
 
 	while (ptr < len)
 	{
@@ -2395,7 +2385,9 @@ static const Object *createClassForArray(Thread *thread, uint8_t type,
 	ary_map_t *tmp = realloc(ary_maps, sizeof(ary_map_t) * (num_ary_maps + 1));
 	if (tmp == NULL) {
 		ret->lock--;
+		pthread_rwlock_unlock(&clslock);
 		warn("createClassForArray: realloc");
+		return NULL;
 	}
 
 	ary_maps = tmp;
@@ -2721,7 +2713,7 @@ static bool isClassLoaded(const Thread *thread, const char *clsname)
 	if (pthread_rwlock_rdlock(&jvm->rwlock))
 		errx(EXIT_FAILURE, "isClassLoaded: pthread_rwlock_rdlock");
 
-	for (ssize_t i = 0; i < MAX_STACK; i++)
+	for (ssize_t i = 0; i < MAX_METHOD; i++)
 	{
 		if (!jvm->method_area[i])
 			continue;
@@ -2736,21 +2728,27 @@ static bool isClassLoaded(const Thread *thread, const char *clsname)
 }
 
 /* setting load to false prevents recursive hell */
-static const ClassFile *findClass2(Thread *thread, const char *clsname, 
-		const bool load)
+static const ClassFile *findClass2(Thread * thread, 
+		const char * clsname, const bool load)
 {
-	const ClassFile *ret = NULL;
-	JVM *jvm = (JVM *)thread->jvm;
+	const ClassFile * ret = NULL;
+	JVM * jvm = (JVM *)thread->jvm;
+	int rc;
+	char buf[BUFSIZ];
 
 	if (!jvm) return NULL;
 
-	if (pthread_rwlock_rdlock(&jvm->rwlock))
-		errx(EXIT_FAILURE, "findClass: pthread_rwlock_rdlock");
-	for (ssize_t i = 0; i < MAX_STACK; i++)
+	if ((rc = pthread_rwlock_rdlock(&jvm->rwlock)) != 0) {
+		strerror_r(rc, buf, sizeof(buf));
+		errx(EXIT_FAILURE, "findClass: pthread_rwlock_rdlock: %s", buf);
+	}
+
+	for (uint16_t i = 0; i < MAX_METHOD; i++)
 	{
 		if (!jvm->method_area[i])
 			continue;
-		if (!strcmp(jvm->method_area[i]->this_class->d.class.name->d.utf8.ascii, clsname)) {
+		if (!strcmp(jvm->method_area[i]->this_class->d.class.name->d.utf8.ascii,
+					clsname)) {
 			ret = jvm->method_area[i];
 			break;
 		}
@@ -2766,7 +2764,6 @@ static const ClassFile *findClass2(Thread *thread, const char *clsname,
 
 	if (!ret && load) {
 		ClassFile *tmp = NULL;
-		char buf[BUFSIZ];
 		snprintf(buf, sizeof(buf), "%s.class", clsname);
 		tmp = loadClass(thread, buf);
 		if (!tmp) return NULL;
@@ -3007,21 +3004,21 @@ static Operand *getFieldInfo(Thread *thread, const ClassFile *cls,
 	return NULL;
 }
 
-static inline uint16_t readShort(const uint8_t *code, int64_t *pc)
+static uint16_t readShort(const uint8_t *code, int64_t *pc)
 {
 	const uint16_t ret = (uint16_t)(256U * code[(*pc)+1] + code[(*pc)+2]); 
 	*pc += 2;
 	return ret;
 }
 
-static inline int32_t readInt(const uint8_t *code, int64_t *pc)
+static int32_t readInt(const uint8_t *code, int64_t *pc)
 {
 	const int32_t ret = (int32_t)(16777216U * code[(*pc)] + 65536U * code[(*pc)+1] + 256U * code[(*pc)+2] + code[(*pc)+3]);
 	*pc += 4;
 	return ret;
 }
 
-static inline int16_t readBranch(const uint8_t *code, int64_t *pc, 
+static int16_t readBranch(const uint8_t *code, int64_t *pc, 
 		const int16_t off)
 {
 	const int16_t bra = (int16_t)(256U * code[(*pc)+1] + code[(*pc)+2]); 
@@ -3080,27 +3077,23 @@ static Operand *ldc(int idx, Frame *cur_frame, const ClassFile *cls,
 #ifdef DEBUG
 				printf("%f", cp->d.tfloat.c_float);
 #endif
-				push(cur_frame, newOperand(TYPE_FLOAT,
-							&cp->d.tfloat.c_float));
+				push(cur_frame, newOperand(TYPE_FLOAT, &cp->d.tfloat.c_float));
 			}
 			break;
 		case CONSTANT_Integer:
 			{
-				push(cur_frame, newOperand(TYPE_INT,
-							&cp->d.tint.c_int));
+				push(cur_frame, newOperand(TYPE_INT, &cp->d.tint.c_int));
 			}
 			break;
 		case CONSTANT_Long:
 			{
-				push(cur_frame, newOperand(TYPE_LONG,
-							&cp->d.tlong.c_long));
+				push(cur_frame, newOperand(TYPE_LONG, &cp->d.tlong.c_long));
 			}
 			break;
 		default:
 			errx(EXIT_FAILURE, 
 					"ldc: unknown constant pool tag: %d", 
 					cp->tag);
-			break;
 	}
 	return NULL;
 }
@@ -3530,6 +3523,46 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					push(cur_frame, dupOperand(getLocal(cur_frame,3)));
 				}
 				break;
+			case 0x26: /* dload_0 */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR " dload_0 " ANSI_RESET "%s %s\n",
+							printOpType(cur_frame->local[0]->type),
+							printOpValue(cur_frame->local[0]));
+#endif
+					push(cur_frame, dupOperand(getLocal(cur_frame,0)));
+				}
+				break;
+			case 0x27: /* dload_1 */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR " dload_1 " ANSI_RESET "%s %s\n",
+							printOpType(cur_frame->local[1]->type),
+							printOpValue(cur_frame->local[1]));
+#endif
+					push(cur_frame, dupOperand(getLocal(cur_frame,1)));
+				}
+				break;
+			case 0x28: /* dload_2 */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR " dload_2 " ANSI_RESET "%s %s\n",
+							printOpType(cur_frame->local[2]->type),
+							printOpValue(cur_frame->local[2]));
+#endif
+					push(cur_frame, dupOperand(getLocal(cur_frame,2)));
+				}
+				break;
+			case 0x29: /* dload_3 */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR " dload_3 " ANSI_RESET "%s %s\n",
+							printOpType(cur_frame->local[3]->type),
+							printOpValue(cur_frame->local[3]));
+#endif
+					push(cur_frame, dupOperand(getLocal(cur_frame,3)));
+				}
+				break;
 			case 0x2a: /* aload_0 */
 				{
 #ifdef DEBUG
@@ -3573,6 +3606,94 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					push(cur_frame, dupOperand(getLocal(cur_frame,3)));
 				}
 				break;
+			case 0x2e: /* iaload */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR " iaload\n" ANSI_RESET);
+#endif
+					Operand *index = pop(cur_frame);
+					Operand *array = pop(cur_frame);
+
+					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+
+					if (array->val.vref->data.array.data[index->val.vint])
+						push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
+					else {
+						tmpOp.val.vint = 0;
+						push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
+					}
+
+					freeOperand(array);
+					freeOperand(index);
+				}
+				break;
+			case 0x2f: /* laload */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR " laload\n" ANSI_RESET);
+#endif
+					Operand *index = pop(cur_frame);
+					Operand *array = pop(cur_frame);
+
+					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+
+					if (array->val.vref->data.array.data[index->val.vint])
+						push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
+					else {
+						tmpOp.val.vlong = 0;
+						push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
+					}
+
+					freeOperand(array);
+					freeOperand(index);
+				}
+				break;
+			case 0x30: /* faload */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR " faload\n" ANSI_RESET);
+#endif
+					Operand *index = pop(cur_frame);
+					Operand *array = pop(cur_frame);
+
+					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+
+					if (array->val.vref->data.array.data[index->val.vint])
+						push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
+					else {
+						tmpOp.val.vfloat = 0.0f;
+						push(cur_frame, newOperand(TYPE_FLOAT, &tmpOp.val.vfloat));
+					}
+
+					freeOperand(array);
+					freeOperand(index);
+				}
+				break;
+			case 0x31: /* daload */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR " daload\n" ANSI_RESET);
+#endif
+					Operand *index = pop(cur_frame);
+					Operand *array = pop(cur_frame);
+
+					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+
+					if (array->val.vref->data.array.data[index->val.vint])
+						push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
+					else {
+						tmpOp.val.vdouble = 0.0f;
+						push(cur_frame, newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble));
+					}
+
+					freeOperand(array);
+					freeOperand(index);
+				}
+				break;
 			case 0x32: /* aaload */
 				{
 #ifdef DEBUG
@@ -3580,6 +3701,9 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 #endif
 					Operand *index = pop(cur_frame);
 					Operand *array = pop(cur_frame);
+
+					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
 
 					if (array->val.vref->data.array.data[index->val.vint])
 						push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
@@ -3597,11 +3721,17 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 #ifdef DEBUG
 					printf(ANSI_INSTR " baload\n" ANSI_RESET);
 #endif
+					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
 
-					if (array->val.vref->data.array.data[index->val.vint])
-						push(cur_frame, newOperand(TYPE_INT,
-									&array->val.vref->data.array.data[index->val.vint]->val.vint));
-					else {
+					if (array->val.vref->data.array.data[index->val.vint]) {
+						if (array->val.vref->data.array.type == TYPE_BOOL)
+							tmpOp.val.vint = array->val.vref->data.array.data[index->val.vint]->val.vbool;
+						else
+							tmpOp.val.vint = array->val.vref->data.array.data[index->val.vint]->val.vbyte;
+
+						push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
+					} else {
 						tmpOp.val.vint = 0;
 						push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
 					}
@@ -3615,21 +3745,41 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					Operand *index = pop(cur_frame);
 					Operand *array = pop(cur_frame);
 #ifdef DEBUG
-					printf(ANSI_INSTR " caload" ANSI_RESET " [%d] %s\n",
-							index->val.vint,
-							printOpType(array->val.vref->data.array.type)
-							);
+					printf(ANSI_INSTR " caload" ANSI_RESET " [%d] %s\n", index->val.vint,
+							printOpType(array->val.vref->data.array.type));
 #endif
-
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
 						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
 
-					if (array->val.vref->data.array.data[index->val.vint])
-						push(cur_frame, newOperand(TYPE_INT, 
-									&array->val.vref->data.array.data[index->val.vint]->val.vint));
-					else {
+					if (array->val.vref->data.array.data[index->val.vint]) {
+						tmpOp.val.vint = array->val.vref->data.array.data[index->val.vint]->val.vchar;
+						push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
+					} else {
 						tmpOp.val.vint = 0;
 						push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
+					}
+
+					freeOperand(index);
+					freeOperand(array);
+				}
+				break;
+			case 0x35: /* saload */
+				{
+					Operand *index = pop(cur_frame);
+					Operand *array = pop(cur_frame);
+#ifdef DEBUG
+					printf(ANSI_INSTR " saload" ANSI_RESET " [%d] %s\n", index->val.vint,
+							printOpType(array->val.vref->data.array.type));
+#endif
+					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+
+					if (array->val.vref->data.array.data[index->val.vint]) {
+						tmpOp.val.vint = array->val.vref->data.array.data[index->val.vint]->val.vshort;
+						push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
+					} else {
+						tmpOp.val.vint = 0;
+						push(cur_frame, newOperand(TYPE_SHORT, &tmpOp.val.vint));
 					}
 
 					freeOperand(index);
@@ -3958,6 +4108,24 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					freeOperand(two);
 				}
 				break;
+			case 0x65: /* lsub */
+				{
+					Operand *one = pop(cur_frame);
+					Operand *two = pop(cur_frame);
+
+					tmpOp.val.vlong = two->val.vlong - one->val.vlong;
+					Operand *res = newOperand(TYPE_LONG, &tmpOp.val.vlong);
+#ifdef DEBUG
+					printf(ANSI_INSTR " lsub " ANSI_RESET "%ld-%ld=%ld\n", 
+							two->val.vlong, 
+							one->val.vlong, 
+							res->val.vlong);
+#endif
+					push(cur_frame, res);
+					freeOperand(one);
+					freeOperand(two);
+				}
+				break;
 			case 0x68: /* imul */
 				{
 					Operand *one = pop(cur_frame);
@@ -4059,7 +4227,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 
 					tmpOp.val.vlong = value1 - (value1 / value2) * value2;
 
-					push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vlong));
+					push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
 					freeOperand(one);
 					freeOperand(two);
 				}
@@ -4197,7 +4365,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					printf(ANSI_INSTR " i2c " ANSI_RESET "%d -> %u\n", val->val.vint,
 							tmpOp.val.vint);
 #endif
-					push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vchar));
+					push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
 					freeOperand(val);
 				}
 				break;
@@ -5086,9 +5254,9 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 #endif
 					Operand *ref = pop(cur_frame);
 					const cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
-					bool match = ref->val.vref->class == findClass(thread, ci->name->d.utf8.ascii);
+					tmpOp.val.vint = ref->val.vref->class == findClass(thread, ci->name->d.utf8.ascii);
 
-					push(cur_frame, newOperand(TYPE_BOOL, &match));
+					push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
 
 					freeOperand(ref);
 				}
@@ -5224,7 +5392,7 @@ static Operand *invokeMethod(Thread *thread, const method_info *meth,
 		const bool withObject, int64_t old_pc)
 {
 	Frame *oldframe = thread->frame_free ? thread->stack[thread->frame_free-1] : NULL;
-	uint32_t num_operands, num_locals;
+	uint16_t num_operands, num_locals;
 	int64_t pc = 0;
 	const Code_attribute *code = NULL;
 	Operand *throw = NULL;
@@ -5248,16 +5416,16 @@ static Operand *invokeMethod(Thread *thread, const method_info *meth,
 					meth->name->d.utf8.ascii,
 					meth->descriptor->d.utf8.ascii);
 		}
-		num_operands = meth->desc.num_params + 13U; // FIXME this should be a max(return#, params#)
-		num_locals = meth->desc.num_params * 2U;
+		num_operands = (uint16_t)(meth->desc.num_params + 13U); // FIXME this should be a max(return#, params#)
+		num_locals = (uint16_t)(meth->desc.num_params * 2U);
 	} else if (meth->access_flags & ACC_NATIVE) {
 		if (!meth->nativeMethod.mvirtual)
 			errx(EXIT_FAILURE, "Missing virtual native method in %s %s %s", 
 					meth->class->this_class->d.class.name->d.utf8.ascii,
 					meth->name->d.utf8.ascii,
 					meth->descriptor->d.utf8.ascii);
-		num_operands = meth->desc.num_params + 13U; // FIXME this should be a max(return#, params#)
-		num_locals = meth->desc.num_params * 2U;
+		num_operands = (uint16_t)(meth->desc.num_params + 13U); // FIXME this should be a max(return#, params#)
+		num_locals = (uint16_t)(meth->desc.num_params * 2U);
 	} else {
 		const attribute_info *ai = findAttribute(meth->attributes, meth->attributes_count, "Code");
 		if (!ai) errx(EXIT_FAILURE, "Missing code attribute for method (%s %s %s)", 
@@ -5272,8 +5440,8 @@ static Operand *invokeMethod(Thread *thread, const method_info *meth,
 				meth->descriptor->d.utf8.ascii);
 
 		/* this is +x to handle situations such as createClass() */
-		num_operands = code->max_stack + 3U;
-		num_locals = code->max_locals * 2U;
+		num_operands = (uint16_t)(code->max_stack + 3U);
+		num_locals = (uint16_t)(code->max_locals * 2U);
 	}
 
 	/* prepare and push the new frame */
@@ -5452,9 +5620,9 @@ static bool addClass(Thread *thread, const ClassFile *cf)
 	if (pthread_rwlock_wrlock(&jvm->rwlock))
 		errx(EXIT_FAILURE, "addClass: pthread_rwlock_wrlock");
 
-	for (; jvm->method_area[ptr] && ptr < MAX_STACK; ptr++) ;
+	for (; jvm->method_area[ptr] && ptr < MAX_METHOD; ptr++) ;
 
-	if (ptr == MAX_STACK)
+	if (ptr == MAX_METHOD)
 		errx(EXIT_FAILURE, "addClass: method_area full");
 
 	((JVM *)jvm)->method_area[ptr] = cf;
@@ -5468,20 +5636,19 @@ static bool addClass(Thread *thread, const ClassFile *cf)
 	return true;
 }
 
-static Operand *dupOperand(const Operand *old)
+static Operand *dupOperand(const Operand * old)
 {
-	if (old == NULL) return NULL;
+	assert(old);
 
-	Operand *new = malloc(sizeof(Operand));
-
-	if (!new) 
-		errx(EXIT_FAILURE, "dupOperand");
+	Operand * new = malloc(sizeof(Operand));
+	if (!new) return NULL;
 
 	memcpy(new, old, sizeof(Operand));
 
 	if (new->type == TYPE_OREF || new->type == TYPE_AREF) {
-		if (new->val.vref == NULL)
-			return newOperand(TYPE_NULL, NULL);
+		assert(new->val.vref != NULL);
+		//if (new->val.vref == NULL)
+		//	return newOperand(TYPE_NULL, NULL);
 		new->val.vref->lock++; // lock-- in freeOperand
 	}
 
@@ -5490,14 +5657,13 @@ static Operand *dupOperand(const Operand *old)
 
 static Operand *newOperand(const uint8_t type, const void *value)
 {
-	Operand *ret = calloc(1, sizeof(Operand));
-	if (ret == NULL)
-		err(EXIT_FAILURE, "newOperand");
+	Operand * ret = calloc(1, sizeof(Operand)); // making this malloc causes SEGV?? FIXME
+	if (!ret) 
+		return NULL;
 
 	ret->type = type;
 
-	if (value)
-		switch (type)
+	if (value) switch (type)
 		{
 			case TYPE_BYTE:		ret->val.vbyte = *(int8_t *)value;		break;
 			case TYPE_CHAR:		ret->val.vchar = *(uint16_t *)value;	break;
@@ -5507,27 +5673,24 @@ static Operand *newOperand(const uint8_t type, const void *value)
 			case TYPE_LONG:		ret->val.vlong = *(int64_t *)value;		break;
 			case TYPE_SHORT:	ret->val.vshort = *(int16_t *)value;	break;
 			case TYPE_BOOL:		ret->val.vbool = *(bool *)value;		break;
+
 			case TYPE_OREF:
-								ret->val.vref = (Object *)value;
-								ret->val.vref->lock++; // lock-- in freeOperand
-								break;
 			case TYPE_AREF:
 								ret->val.vref = (Object *)value;
 								ret->val.vref->lock++; // lock-- in freeOperand
 								break;
 			default:			
 								warnx("newOperand: no idea how to create type: %x", type);
-								__asm__("int $3");
+								abort();
 								break;
-		}
+		} 
 
 	return ret;
 }
 
-static void freeOperand(Operand *o)
+static void freeOperand(Operand * o)
 {
-	if (!o) return;
-	switch(o->type)
+	if (o) switch(o->type)
 	{
 		case TYPE_AREF:
 		case TYPE_OREF:
@@ -5537,12 +5700,11 @@ static void freeOperand(Operand *o)
 				else
 					o->val.vref->lock--;
 			}
-			break;
 		default:
+			o->type = TYPE_NULL;
+			free(o);
 			break;
 	}
-	o->type = TYPE_NULL;
-	free(o);
 }
 
 static Operand *fileoutputstream_writeb(Thread *thread, const ClassFile *cls, 
@@ -5887,7 +6049,7 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread, const ClassFi
 			return NULL;
 		}
 
-		int line = -1;
+		int32_t line = -1;
 
 		if (fr->mi && fr->mi->code && fr->mi->code->lineno ) {
 			const Code_attribute *code = fr->mi->code;
@@ -6440,7 +6602,7 @@ static bool findHeapSlot(Thread *thread, Object *obj)
 
 	pthread_rwlock_wrlock(&jvm->rwlock);
 
-	for(int32_t i = 0; i < MAX_STACK; i++)
+	for(uint16_t i = 0; i < MAX_HEAP; i++)
 		if (jvm->heap[i] == NULL) {
 			jvm->heap[i] = obj;
 			obj->heaploc = i;
@@ -6803,6 +6965,7 @@ static void freeAttribute(attribute_info *ai)
 		{
 			case ATTR_LINENUMBERTABLE:
 				found = true;
+				if (ai->d.lineno->line_number_table) free(ai->d.lineno->line_number_table);
 				free((void *)ai->d.lineno);
 				break;
 			case ATTR_SOURCEFILE:
@@ -7154,6 +7317,8 @@ static void freeClass(JVM *jvm, ClassFile *cf)
 						utf8->utf16 = NULL;
 						if (utf8->ascii) free(utf8->ascii);
 						utf8->ascii = NULL;
+						if (utf8->bytes) free(utf8->bytes);
+						utf8->bytes = NULL;
 					}
 					break;
 				default:
@@ -7297,7 +7462,7 @@ static void freeJVM(JVM *j)
 
 	free(ary_maps);
 
-	for (uint16_t i = 0; i < MAX_STACK; i++)
+	for (uint16_t i = 0; i < MAX_METHOD; i++)
 	{
 		if (j->method_area[i])
 			freeClass(j, (ClassFile *)j->method_area[i]);
@@ -7305,7 +7470,7 @@ static void freeJVM(JVM *j)
 
 
 	for (int k = 0; k < 10; k++) {
-		for (uint16_t i = 0; i < MAX_STACK; i++)
+		for (uint16_t i = 0; i < MAX_HEAP; i++)
 		{
 			if (j->heap[i]) {
 #ifdef DEBUG
@@ -7350,7 +7515,7 @@ static ClassFile *processNatives(Thread *thread, const internalClass *ic)
 		goto fail;
 	}
 
-	for (int i = 0; i < MAX_METHODS; i++)
+	for (uint16_t i = 0; i < MAX_METHODS; i++)
 	{
 		if (!ic->methods[i].name) continue;
 
@@ -7526,7 +7691,9 @@ static void *threadinit(void *arg)
 		while (cur_frame->sp)
 			freeOperand(pop(cur_frame));
 
-		if (!push(cur_frame, dupOperand(ret))) {
+		Operand *dup = dupOperand(ret);
+		if (!push(cur_frame, dup)) {
+			freeOperand(dup);
 			warnx("threadinit: failed to push thrown object: %d/%d", cur_frame->sp, cur_frame->num_stack);
 		} else {
 			const method_info *mi = findMethodByClass(self, 
@@ -7569,8 +7736,8 @@ static Operand *startThread(Thread *thread)
 	}
 
 	Frame *first = newFrame(
-			thread->cur_method->code->max_stack + 3U, 
-			umax(thread->cur_method->desc.num_params, thread->cur_method->code->max_locals) + 2U
+			(uint16_t)(thread->cur_method->code->max_stack + 3U), 
+			(uint16_t)(umax(thread->cur_method->desc.num_params, thread->cur_method->code->max_locals) + 2U)
 			);
 	if (first == NULL || !first->local) {
 		errx(EXIT_FAILURE, "startThread: unable to create frame");
@@ -7682,7 +7849,7 @@ int main(const int ac, const char *av[])
 
 	printf("boot: linking early classes\n");
 	/* ensure getClass() works on them */
-	for (ssize_t i = 0; i < MAX_STACK; i++)
+	for (uint16_t i = 0; i < MAX_METHOD; i++)
 	{
 		ClassFile *ret = (ClassFile *)jvm->method_area[i];
 		if (!ret)
@@ -7736,10 +7903,6 @@ int main(const int ac, const char *av[])
 
 		primitiveClassMap[i].class = fi->static_operand->val.vref;
 	}
-
-	createClass(parent, cls_String);
-	createClass(parent, cls_Object);
-	createClass(parent, cls_Class);
 
 	if ((parent->thread = newObject(parent, findClass2(parent, "java/lang/Thread", false))) == NULL)
 		errx(EXIT_FAILURE, "boot: unable to create Thread Object");
