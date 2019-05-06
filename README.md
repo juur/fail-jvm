@@ -23,4 +23,13 @@ The following packages have some implemented classes based on the published API 
 * java.math
 * java.text
 
+## Usage
+
+type make to compile
+
+by default looks in /usr/lib/jvm/java-1.6.0 for bin/javac. See Makefile top for overrides.
+
+to run, place Java source in a 'test' folder, and run with two arguments: ClassFile.class ClassFile
+Any java source in the test folder will be compiled
+
 Oracle and Java are registered trademarks of Oracle and/or its affiliates. Other names may be trademarks of their respective owners.
