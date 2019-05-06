@@ -138,8 +138,8 @@ typedef struct {
 	uint16_t	name_index;
 	uint16_t	descriptor_index;
 
-	const struct _cp_info	*name;
-	const struct _cp_info	*descriptor;
+	struct _cp_info	*name;
+	struct _cp_info	*descriptor;
 } cp_NameAndType_info;
 
 typedef struct {
@@ -167,14 +167,14 @@ typedef struct {
 	uint16_t	string_index;
 
 	/* char[] */
-	const struct _Object *intern;
-	const struct _cp_info		 *string;
+	struct _Object *intern;
+	struct _cp_info		 *string;
 } cp_String_info;
 
 typedef struct {
 	uint16_t	name_index;
 
-	const struct _cp_info *name;
+	struct _cp_info *name;
 } cp_Class_info;
 
 
@@ -183,8 +183,8 @@ typedef struct {
 	uint16_t	class_index;
 	uint16_t	name_and_type_index;
 
-	const struct _cp_info	*class;
-	const struct _cp_info	*nametype;
+	struct _cp_info	*class;
+	struct _cp_info	*nametype;
 } cp_Fieldref_info;
 
 typedef struct _cp_info {
@@ -223,9 +223,9 @@ enum std_attr_e {
 };
 
 struct predefinedAttribute {
-	const enum std_attr_e	 attr;
-	const char				*name;
-	const size_t			 size;
+	enum std_attr_e	 attr;
+	const char		*name;
+	size_t			 size;
 };
 
 struct _ClassFile;
@@ -247,10 +247,10 @@ typedef struct {
 	uint16_t	inner_name_index;
 	uint16_t	inner_class_access_flags;
 
-	const cp_info			*inner_ci;
-	const cp_info			*outer_ci;
-	const struct _ClassFile	*inner_class;
-	const cp_info			*inner_name;
+	cp_info			*inner_ci;
+	cp_info			*outer_ci;
+	struct _ClassFile	*inner_class;
+	cp_info			*inner_name;
 } inner_class_def;
 
 typedef struct {
@@ -260,12 +260,12 @@ typedef struct {
 
 typedef struct {
 	uint16_t		 sourcefile_index;
-	const cp_info	*name;
+	cp_info	*name;
 } SourceFile_attribute;
 
 typedef struct {
 	uint16_t		  number_of_exceptions;
-	const cp_info	**exception_index_table;
+	cp_info	**exception_index_table;
 } Exceptions_attribute;
 
 typedef union _OperandValue {
@@ -288,19 +288,19 @@ typedef struct _Operand {
 
 typedef struct {
 	uint16_t		 constantvalue_index;
-	const cp_info	*entry;
+	cp_info	*entry;
 	Operand			 op;
 } ConstantValue_attribute;
 
 typedef struct {
 	uint16_t		 bootstrap_method_ref;
 	uint16_t		 num_bootstrap_arguments;
-	const uint16_t	*bootstrap_arguments;
+	uint16_t	*bootstrap_arguments;
 } bootstrap_method;
 
 typedef struct {
 	uint16_t				  num_bootstrap_methods;
-	const bootstrap_method	**bootstrap_methods;
+	bootstrap_method	**bootstrap_methods;
 } BootstrapMethods_attribute;
 
 typedef struct {
@@ -309,7 +309,7 @@ typedef struct {
 	uint16_t handler_pc;
 	uint16_t catch_type_idx;
 
-	const cp_info *catch_type;
+	cp_info *catch_type;
 } exception;
 
 struct _attribute_info;
@@ -318,14 +318,14 @@ typedef struct {
 	uint16_t		  max_stack;
 	uint16_t		  max_locals;
 	uint32_t		  code_length;
-	const uint8_t	 *code;
+	uint8_t	 *code;
 	uint16_t		  exception_table_length;
-	const exception	**exception_table;
+	exception	**exception_table;
 	uint16_t		  attributes_count;
 
-	const struct _method_info		 *method;
-	const struct _attribute_info	**attributes;
-	const LineNumberTable_attribute	 *lineno;
+	struct _method_info		 *method;
+	struct _attribute_info	**attributes;
+	LineNumberTable_attribute	 *lineno;
 } Code_attribute;
 
 typedef struct {
@@ -413,20 +413,20 @@ typedef struct _attribute_info {
 	uint32_t		 attribute_length;
 
 	union {
-		const Code_attribute			*code;
-		const Exceptions_attribute		*exception;
-		const StackMapTable_attribute	*stackmap;
-		const ConstantValue_attribute	*constant;
-		const InnerClasses_attribute	*inner;
-		const SourceFile_attribute		*srcfile;
-		const LineNumberTable_attribute	*lineno;
-		const void						*data;
+		Code_attribute			*code;
+		Exceptions_attribute		*exception;
+		StackMapTable_attribute	*stackmap;
+		ConstantValue_attribute	*constant;
+		InnerClasses_attribute	*inner;
+		SourceFile_attribute		*srcfile;
+		LineNumberTable_attribute	*lineno;
+		void						*data;
 	} d;
 
-	const cp_info	*name;
+	cp_info	*name;
 
 	/* must be last for unknown attributes */
-	const uint8_t	 info[];
+	uint8_t	 info[];
 } attribute_info;
 
 /* descriptors */
@@ -442,7 +442,7 @@ typedef struct {
 	des_Field	  ret;
 	uint16_t	  num_params;
 
-	const des_Field	**params;
+	des_Field	**params;
 } des_Method;
 
 /* field_info */
@@ -455,14 +455,14 @@ typedef struct {
 	uint16_t		descriptor_index;
 	uint16_t		attributes_count;
 
-	const attribute_info	**attributes;
+	attribute_info	**attributes;
 
 	des_Field		 desc;
 
-	const cp_info	*name;
-	const cp_info	*descriptor;
+	cp_info	*name;
+	cp_info	*descriptor;
 	struct _Operand *static_operand;
-	const struct _ClassFile		*class;
+	struct _ClassFile		*class;
 } field_info;
 
 /* method_info */
@@ -471,9 +471,9 @@ struct _Thread;
 struct _Object;
 
 typedef struct _Operand *(*intStaticMethod)(struct _Thread *, 
-		const struct _ClassFile *);
+		struct _ClassFile *);
 typedef struct _Operand *(*intMethod)(struct _Thread *, 
-		const struct _ClassFile *, 
+		struct _ClassFile *, 
 		struct _Object *o);
 
 typedef struct _method_info {
@@ -484,16 +484,16 @@ typedef struct _method_info {
 
 	des_Method		 desc;
 
-	const struct _ClassFile	 *class;
-	const attribute_info	**attributes;
-	const cp_info			 *name;
-	const cp_info			 *descriptor;
+	struct _ClassFile	 *class;
+	attribute_info	**attributes;
+	cp_info			 *name;
+	cp_info			 *descriptor;
 	union {
 		intStaticMethod	mstatic;
 		intMethod		mvirtual;
 	} nativeMethod;
-	const Exceptions_attribute	*exceptions;
-	const Code_attribute		*code;
+	Exceptions_attribute	*exceptions;
+	Code_attribute		*code;
 } method_info;
 
 /* ClassFile */
@@ -505,23 +505,23 @@ typedef struct _ClassFile {
 	uint16_t		      minor_version;
 	uint16_t	          major_version;
 	uint16_t			  constant_pool_count;
-	const cp_info		**constant_pool;
+	cp_info		**constant_pool;
 	uint16_t			  access_flags;
 	uint16_t			  this_class_idx;
 	uint16_t			  super_class_idx;
 	uint16_t			  interfaces_count;
 	uint16_t			 *interfaces;
-	const cp_info		**interface_class;
+	cp_info		**interface_class;
 	uint16_t			  fields_count;
-	const field_info	**fields;
+	field_info	**fields;
 	uint16_t			  methods_count;
-	const method_info	**methods;
+	method_info	**methods;
 	uint16_t			  attributes_count;
-	const attribute_info **attributes;
+	attribute_info **attributes;
 
-	const cp_info		 *this_class;
-	const cp_info		 *super_class;
-	const cp_info		 *srcfile;
+	cp_info		 *this_class;
+	cp_info		 *super_class;
+	cp_info		 *srcfile;
 	const char			 *super_name;
 	bool				  isInit;
 	int32_t				  heaploc;
@@ -535,7 +535,7 @@ typedef struct _ClassFile {
 
 typedef struct {
 	Operand				*op;
-	const field_info	*field_info;
+	field_info	*field_info;
 } Field;
 
 #define OBJ_CLASS	1
@@ -547,8 +547,8 @@ typedef struct _Object {
 	int32_t		heaploc;
 
 	pthread_mutex_t			 monitor;
-	const ClassFile			*class;
-	const struct _Object	*class_obj;
+	ClassFile			*class;
+	struct _Object	*class_obj;
 
 	/* place other common to both array & object things above here */
 
@@ -580,9 +580,9 @@ typedef struct {
 	Operand		 *ret;
 	Operand		**local;
 
-	const ClassFile		*class;
-	const method_info	*mi;
-	const Operand		**stack;
+	ClassFile		*class;
+	method_info	*mi;
+	Operand		**stack;
 } Frame;
 
 typedef enum _th_state_en {
@@ -607,8 +607,8 @@ typedef struct _Thread {
 	th_state_en		 state;
 
 	pthread_rwlock_t	 rwlock;
-	const struct _JVM	*jvm;
-	const method_info	*cur_method;
+	struct _JVM	*jvm;
+	method_info	*cur_method;
 } Thread;
 
 typedef struct _JVM {
@@ -617,7 +617,7 @@ typedef struct _JVM {
 	bool			 ClassInit;
 	Thread			*cur_thread;
 	Object			*heap[MAX_HEAP];
-	const ClassFile	*method_area[MAX_METHOD];
+	ClassFile	*method_area[MAX_METHOD];
 	Thread			*threads[MAX_THREADS];
 } JVM;
 
@@ -630,7 +630,7 @@ typedef struct _JVM {
 typedef struct {
 	const char *name;
 	const char *desc;
-	const uint16_t access;
+	uint16_t access;
 } internalField;
 
 typedef struct {
@@ -695,41 +695,41 @@ static prim_class_map_t primitiveClassMap[] = {
 
 static Object *getClassObject(Thread *, ClassFile *);
 static bool linkCpString(Thread *, cp_info *);
-static bool fixupCpString(Thread *, cp_info *, const cp_info **, const uint16_t);
+static bool fixupCpString(Thread *, cp_info *, cp_info **, uint16_t);
 static bool linkClass(Thread *, ClassFile *);
-static Operand *newStringFromChar(Thread *, const Object *, Object **);
-static const field_info *findClassFieldForClass(Thread *, const ClassFile *, const char *);
-static bool isClassLoaded(const Thread *, const char *);
+static Operand *newStringFromChar(Thread *, Object *, Object **);
+static field_info *findClassFieldForClass(Thread *, ClassFile *, const char *);
+static bool isClassLoaded(Thread *, const char *);
 static void freeClass(JVM *jvm, ClassFile *cf);
 static void freeObject(JVM *jvm, Object *o);
 static Operand *newString(Thread *, const char *, Object **);
 static bool fixupCpUtf8(cp_info *);
-static const ClassFile *findClass2(Thread *, const char *, const bool);
+static ClassFile *findClass2(Thread *, const char *, bool);
 static Operand *throw(Thread *, const char *, const char *, int64_t pc);
 static Operand *startThread(Thread *);
 static Thread *newThread(JVM *, Object *);
 static ClassFile *loadClass(Thread *, const char *);
-static Object *newArray(Thread *, const uint8_t, const uint32_t, const ClassFile *);
-static Object *newObject(Thread *, const ClassFile *);
-static Operand *dupOperand(const Operand *);
-static Operand *newOperand(const uint8_t, const void *);
-static bool addClass(Thread *, const ClassFile *);
-static const ClassFile *findClass(Thread *, const char *);
-static const method_info *findClassMethod(Thread *, const char *, const char *, const char *);
-static const method_info *findMethodByClass(Thread *, const ClassFile *, const char *, const char *);
+static Object *newArray(Thread *, uint8_t, uint32_t, ClassFile *);
+static Object *newObject(Thread *, ClassFile *);
+static Operand *dupOperand(Operand *);
+static Operand *newOperand(uint8_t, void *);
+static bool addClass(Thread *, ClassFile *);
+static ClassFile *findClass(Thread *, const char *);
+static method_info *findClassMethod(Thread *, const char *, const char *, const char *);
+static method_info *findMethodByClass(Thread *, ClassFile *, const char *, const char *);
 static Operand *classInit(Thread *, ClassFile *cls);
 static void freeOperand(Operand *);
-static Operand *invokeMethod(Thread *, const method_info *, bool, int64_t);
+static Operand *invokeMethod(Thread *, method_info *, bool, int64_t);
 static Object *createClass(Thread *, ClassFile *);
 
 #ifdef DEBUG
-const char *printObject(const Object *o);
-void dumpClass(const ClassFile *);
-void dumpFrame(const Frame *f);
-void dumpStack(const Frame *frame, const char *op);
-void disasm(const uint8_t *code, const uint32_t len);
+const char *printObject(Object *o);
+void dumpClass(ClassFile *);
+void dumpFrame(Frame *f);
+void dumpStack(Frame *frame, char *op);
+void disasm(uint8_t *code, uint32_t len);
 #endif
-ClassFile *buildInternalClass(const internalClass *ic);
+ClassFile *buildInternalClass(internalClass *ic);
 
 /*
  * Inline function defintions
@@ -742,7 +742,7 @@ static int max(const int a, const int b)
 }
 */
 
-static unsigned int umax(const unsigned int a, const unsigned int b)
+static unsigned int umax(unsigned int a, unsigned int b)
 {
 	return a < b ? b : a;
 }
@@ -757,7 +757,7 @@ static Frame *currentFrame(Thread * thread)
  * Function defintions
  */
 
-static const char *printOpType(const uint8_t type)
+static const char *printOpType(uint8_t type)
 {
 	static char buf [BUFSIZ];
 	buf[0] = '\0';
@@ -785,8 +785,8 @@ static const char *printOpType(const uint8_t type)
 }
 
 #ifdef DEBUG
-static const char *printOpValue(const Operand *op);
-static const char *printArray(const Object *o)
+static char *printOpValue(Operand *op);
+static char *printArray(Object *o)
 {
 	static char buf[BUFSIZ];
 	FILE *bfp = fmemopen(buf, sizeof(buf), "w");
@@ -803,7 +803,7 @@ static const char *printArray(const Object *o)
 	return buf;
 }
 
-static const char *printOpValue(const Operand *op)
+static char *printOpValue(Operand *op)
 {
 	if (op == NULL)
 		return "<>";
@@ -835,7 +835,7 @@ static const char *printOpValue(const Operand *op)
 	return buf;
 }
 
-void dumpStack(const Frame *frame, const char *op)
+void dumpStack(Frame *frame, const char *op)
 {
 	if (!frame->sp) {
 		printf(" %4s\t<now empty>\n", op);
@@ -857,7 +857,7 @@ void dumpStack(const Frame *frame, const char *op)
 }
 #endif
 
-static bool push(Frame * frame, const Operand * op)
+static bool push(Frame * frame, Operand * op)
 {
 	assert(op != 0);
 	assert(op->type != 0);
@@ -877,13 +877,13 @@ static Operand *pop(Frame * frame)
 	return ret;
 }
 
-static Operand *getLocal(Frame * frame, const uint16_t slot)
+static Operand *getLocal(Frame * frame, uint16_t slot)
 {
 	assert(slot < frame->num_local);
 	return frame->local[slot];
 }
 
-static void clearAndFreeLocal(Frame *frame, const uint16_t slot)
+static void clearAndFreeLocal(Frame *frame, uint16_t slot)
 {
 	const Operand *value = getLocal(frame, slot);
 	if (value == NULL) return;
@@ -899,7 +899,7 @@ static void clearAndFreeLocal(Frame *frame, const uint16_t slot)
 	freeOperand((Operand *)value);
 }
 
-static Operand *setLocal(Frame * frame, const uint16_t slot, Operand *value)
+static Operand *setLocal(Frame * frame, uint16_t slot, Operand *value)
 {
 	if (value == NULL || slot >= frame->num_local) return NULL;
 
@@ -915,7 +915,7 @@ static Operand *setLocal(Frame * frame, const uint16_t slot, Operand *value)
 }
 
 #ifdef DEBUG
-static void printAccessFlags(const uint16_t flag, char *buf)
+static void printAccessFlags(uint16_t flag, char *buf)
 {
 	//static char buf[BUFSIZ];
 	buf[0] = '\0';
@@ -958,7 +958,7 @@ static bool read1(FILE * f, uint8_t * dst)
 	return true;
 }
 
-static Object *findObjForPrim(const uint8_t type)
+static Object *findObjForPrim(uint8_t type)
 {
 	for (ssize_t i = 0; primitiveClassMap[i].c_name; i++)
 		if (primitiveClassMap[i].type == type)
@@ -1120,7 +1120,7 @@ fail:
 	return NULL;
 }
 
-static Frame *newFrame(const uint16_t num_stacks, const uint16_t num_locals)
+static Frame *newFrame(uint16_t num_stacks, uint16_t num_locals)
 {
 	Frame *ret = calloc(1, sizeof(Frame));
 
@@ -1175,7 +1175,7 @@ static void freeFrame(Frame *f)
 	free(f);
 }
 
-static exception *readException(const uint32_t me, FILE *f, const cp_info **cp, const uint32_t cpcnt)
+static exception *readException(uint32_t me, FILE *f, cp_info **cp, uint32_t cpcnt)
 {
 	exception *ret = NULL;
 	if ((ret = calloc(1, sizeof(exception))) == NULL) return NULL;
@@ -1196,7 +1196,7 @@ fail:
 }
 
 #ifdef DEBUG
-void disasm(const uint8_t *code, const uint32_t len)
+void disasm(uint8_t *code, uint32_t len)
 {
 	const uint8_t *ptr = code;
 	uint16_t tmp16;
@@ -1420,8 +1420,7 @@ static union verification_type_info *readVerificationTypeInfo(FILE *f)
 	return ret;
 }
 
-static attribute_info *readAttribute(Thread *thread, const uint32_t me, FILE *f, 
-		const cp_info **cp, const uint32_t cp_cnt)
+static attribute_info *readAttribute(Thread *thread, uint32_t me, FILE *f, cp_info **cp, uint32_t cp_cnt)
 {
 	const JVM *jvm = thread->jvm;
 	attribute_info *ret = NULL;
@@ -1435,7 +1434,7 @@ static attribute_info *readAttribute(Thread *thread, const uint32_t me, FILE *f,
 	if (!read4(f, &len)) return NULL;
 
 	bool found = false;
-	const struct predefinedAttribute *pa;
+	struct predefinedAttribute *pa;
 
 	for (int i = 0; ((pa = &predefinedAttrs[i])->name) != NULL; i++)
 	{
@@ -1764,7 +1763,7 @@ fail:
 
 static const char *parseParamDescriptor(des_Field *desc, const char *str)
 {
-	const uint8_t *ptr = (uint8_t *)str;
+	uint8_t *ptr = (uint8_t *)str;
 loop:
 	switch (*ptr)
 	{
@@ -1835,7 +1834,7 @@ static const char *dumpParamDesc(const des_Field *desc)
 }
 #endif
 
-static field_info *readField(Thread *thread, FILE *f, const cp_info **cp, const uint32_t cp_cnt, const ClassFile *cls)
+static field_info *readField(Thread *thread, FILE *f, cp_info **cp, uint32_t cp_cnt, ClassFile *cls)
 {
 	if (cls == NULL)
 		errx(EXIT_FAILURE, "cls is null");
@@ -1872,7 +1871,7 @@ static field_info *readField(Thread *thread, FILE *f, const cp_info **cp, const 
 			goto fail;
 		}
 
-	ret->attributes = (const attribute_info **)attrs;
+	ret->attributes = attrs;
 
 	if (ret->access_flags & ACC_STATIC)
 		for (uint32_t i = 0; i < ret->attributes_count; i++)
@@ -1937,7 +1936,7 @@ static bool parseMethodDescriptor(des_Method *desc, const char *str)
 		goto fail;
 	}
 
-	desc->params = (const des_Field **)ret;
+	desc->params = ret;
 
 	return true;
 fail:
@@ -1953,8 +1952,7 @@ fail:
 	return false;
 }
 
-static method_info *readMethod(Thread *thread, FILE *f, const cp_info **cp, 
-		const uint32_t cp_cnt, const ClassFile *class)
+static method_info *readMethod(Thread *thread, FILE *f, cp_info **cp, uint32_t cp_cnt, ClassFile *class)
 {
 	method_info *ret = NULL;
 	attribute_info **attrs = NULL;
@@ -1984,7 +1982,7 @@ static method_info *readMethod(Thread *thread, FILE *f, const cp_info **cp,
 			goto fail;
 		}
 
-	ret->attributes = (const attribute_info **)attrs;
+	ret->attributes = attrs;
 
 	for (uint32_t i = 0; i < ret->attributes_count; i++) {
 		if (!ret->attributes[i]) continue;
@@ -2005,7 +2003,7 @@ fail:
 	return NULL;
 }
 
-static uint16_t *parseCpUtf8ToUtf16(const uint8_t *src, const uint16_t len, uint16_t *utf16len)
+static uint16_t *parseCpUtf8ToUtf16(uint8_t *src, uint16_t len, uint16_t *utf16len)
 {
 	uint16_t ptr = 0;
 	uint16_t dst = 0;
@@ -2064,7 +2062,7 @@ fail:
 	return NULL;
 }
 
-static char *parseUtf16ToAscii(const uint16_t *src, const uint32_t len)
+static char *parseUtf16ToAscii(uint16_t *src, uint32_t len)
 {
 	char *ret = NULL;
 	uint32_t sptr = 0;
@@ -2105,7 +2103,7 @@ static bool fixupCpUtf8(cp_info *ci)
 	return true;
 }
 
-static bool fixupCpString(Thread *thread, cp_info *ci, const cp_info **pool, const uint16_t cp_len)
+static bool fixupCpString(Thread *thread, cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
 	if (ci->d.str.string && ci->d.str.intern) 
 		return true;
@@ -2138,7 +2136,7 @@ static bool linkCpString(Thread *thread, cp_info *ci)
 	return true;
 }
 
-static bool fixupCpClass(cp_info *ci, const cp_info **pool, const uint16_t cp_len)
+static bool fixupCpClass(cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
 	if (ci->d.class.name)
 		return true;
@@ -2151,7 +2149,7 @@ static bool fixupCpClass(cp_info *ci, const cp_info **pool, const uint16_t cp_le
 	return true;
 }
 
-static bool fixupCpFieldref(cp_info *ci, const cp_info **pool, const uint16_t cp_len)
+static bool fixupCpFieldref(cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
 	if (ci->d.fr.class && ci->d.fr.nametype)
 		return true;
@@ -2168,7 +2166,7 @@ static bool fixupCpFieldref(cp_info *ci, const cp_info **pool, const uint16_t cp
 	return true;
 }
 
-static bool fixupCpNameAndType(cp_info *ci, const cp_info **pool, const uint16_t cp_len)
+static bool fixupCpNameAndType(cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
 	if (ci->d.nt.name && ci->d.nt.descriptor) return true;
 
@@ -2184,8 +2182,7 @@ static bool fixupCpNameAndType(cp_info *ci, const cp_info **pool, const uint16_t
 	return true;
 }
 
-static bool fixupConstant(Thread *thread, cp_info *ci, const cp_info **pool, 
-		const uint16_t cp_len)
+static bool fixupConstant(Thread *thread, cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
 	switch(ci->tag)
 	{
@@ -2207,8 +2204,7 @@ static bool fixupConstant(Thread *thread, cp_info *ci, const cp_info **pool,
 	return true;
 }
 
-static Operand *loadInnerClass(Thread *thread, const InnerClasses_attribute *ic,
-		const ClassFile *cf)
+static Operand *loadInnerClass(Thread *thread, InnerClasses_attribute *ic, ClassFile *cf)
 {
 	if(thread == NULL || ic == NULL || cf == NULL)
 		errx(EXIT_FAILURE, "loadInnerClass: shit");
@@ -2238,7 +2234,7 @@ static Operand *loadInnerClass(Thread *thread, const InnerClasses_attribute *ic,
 	return NULL;
 }
 
-static Field *findFieldByName(const Object *o, const char *name)
+static Field *findFieldByName(Object *o, const char *name)
 {
 	field_info *fi;
 
@@ -2256,8 +2252,7 @@ static Field *findFieldByName(const Object *o, const char *name)
 }
 
 /* not-jvm-safe */
-static Operand *newStringFromChar(Thread *thread, const Object *buf, 
-		Object **result)
+static Operand *newStringFromChar(Thread *thread, Object *buf, Object **result)
 {
 	assert(thread->jvm->VM == true);
 	Frame *cur_frame = currentFrame(thread);
@@ -2274,17 +2269,16 @@ static Operand *newStringFromChar(Thread *thread, const Object *buf,
 	}
 
 	/* create the String */
-	const ClassFile *str_cls = findClass(thread, "java/lang/String");
+	ClassFile *str_cls = findClass(thread, "java/lang/String");
 	Object *str_obj = newObject(thread, str_cls);
-	const Operand *str_op = newOperand(TYPE_OREF, str_obj);
+	Operand *str_op = newOperand(TYPE_OREF, str_obj);
 	push(cur_frame, str_op);
 
-	const Operand *arr_op = newOperand(TYPE_AREF, buf);
+	Operand *arr_op = newOperand(TYPE_AREF, buf);
 	push(cur_frame, arr_op);
 
 	/* invoke String.init(char []) */
-	const method_info *mi = findMethodByClass(thread, str_cls,
-			"<init>", "([C)V");
+	method_info *mi = findMethodByClass(thread, str_cls, "<init>", "([C)V");
 	Operand *ex_opr = NULL;
 	if ((ex_opr = invokeMethod(thread, mi, true, 0)) != NULL) {
 		warnx("newStringFromChar: <init> ([C)V threw");
@@ -2304,15 +2298,14 @@ static Operand *newString(Thread *thread, const char *text, Object **result)
 	*result = NULL;
 
 	/* create the char[] */
-	const Object *array = newArray(thread, TYPE_CHAR, (uint32_t)strlen(text), 
-			NULL);
+	Object *array = newArray(thread, TYPE_CHAR, (uint32_t)strlen(text), NULL);
 
 	if (array == NULL)
 		return throw(thread, "java/lang/RuntimeException", ERR_AT, 0);
 
 	for (uint32_t i = 0; text[i]; i++)
 	{
-		const uint16_t ch = (uint8_t)text[i];
+		uint16_t ch = (uint8_t)text[i];
 		freeOperand(array->data.array.data[i]);
 		array->data.array.data[i] = newOperand(TYPE_CHAR, &ch);
 	}
@@ -2324,15 +2317,14 @@ static pthread_rwlock_t clslock;
 
 typedef struct {
 	const char		*canonical;
-	const Object	*object;
+	Object	*object;
 } ary_map_t;
 
 static uint32_t num_ary_maps = 0;
 static ary_map_t *ary_maps = NULL;
 
 
-static const Object *createClassForArray(Thread *thread, uint8_t type, 
-		uint8_t dim, const ClassFile *compClass)
+static Object *createClassForArray(Thread *thread, uint8_t type, uint8_t dim, ClassFile *compClass)
 {
 	assert(thread->jvm->VM == true);
 	int rc;
@@ -2367,7 +2359,7 @@ static const Object *createClassForArray(Thread *thread, uint8_t type,
 	printf("Creating class for %s\n", buf);
 #endif
 
-	const ClassFile *class_cf = findClass2(thread, "java/lang/Class", false);
+	ClassFile *class_cf = findClass2(thread, "java/lang/Class", false);
 	if (!class_cf) return NULL;
 
 	Frame *cur_frame = currentFrame(thread);
@@ -2397,8 +2389,7 @@ static const Object *createClassForArray(Thread *thread, uint8_t type,
 
 	pthread_rwlock_unlock(&clslock);
 
-	const method_info *mi = findMethodByClass(thread, class_cf,
-			"<init>", "()V");
+	method_info *mi = findMethodByClass(thread, class_cf, "<init>", "()V");
 	if (!push(cur_frame, newOperand(TYPE_OREF, ret))) {
 		ret->lock--;
 		warnx("createClassForArray: push");
@@ -2463,15 +2454,14 @@ static Object *createClass(Thread *thread, ClassFile *cf)
 {
 	assert(thread->jvm->VM == true);
 
-	const ClassFile *class_cf = findClass2(thread, "java/lang/Class", false);
+	ClassFile *class_cf = findClass2(thread, "java/lang/Class", false);
 	if (!class_cf) return NULL;
 
 	Frame *cur_frame = currentFrame(thread);
 	Object *ret = newObject(thread, class_cf);
 	// lock-- in freeClass
 	ret->lock++;
-	const method_info *mi = findMethodByClass(thread, class_cf,
-			"<init>", "()V");
+	method_info *mi = findMethodByClass(thread, class_cf, "<init>", "()V");
 	push(cur_frame, newOperand(TYPE_OREF, ret));
 	if (invokeMethod(thread, mi, true, 0))
 		errx(EXIT_FAILURE, "createClass: thrown");
@@ -2668,7 +2658,7 @@ static Operand *throw(Thread *thread, const char *name, const char *text,
 		freeOperand(pop(cur_frame));
 
 	Operand *ex_opr = NULL;
-	const ClassFile *thrcls = findClass(thread, name);
+	ClassFile *thrcls = findClass(thread, name);
 
 	if (thrcls == NULL) {
 		if(!strcmp(name, "java/lang/RuntimeException")) 
@@ -2678,7 +2668,7 @@ static Operand *throw(Thread *thread, const char *name, const char *text,
 			return throw(thread, "java/lang/RuntimeException", name, pc);
 	}
 
-	const Object *thr = newObject(thread, thrcls);
+	Object *thr = newObject(thread, thrcls);
 	
 	push(cur_frame, newOperand(TYPE_OREF, thr));
 		
@@ -2690,7 +2680,7 @@ static Operand *throw(Thread *thread, const char *name, const char *text,
 		push(cur_frame, newOperand(TYPE_OREF,str));
 	}
 
-	const method_info *mi = findMethodByClass(thread, thrcls, 
+	method_info *mi = findMethodByClass(thread, thrcls, 
 			"<init>", text ? "(Ljava/lang/String;)V" : "()V");
 	if ((ex_opr = invokeMethod(thread, mi, true, pc)) != NULL)
 		return ex_opr;
@@ -2706,7 +2696,7 @@ static Operand *throw(Thread *thread, const char *name, const char *text,
 	return (Operand *)newOperand(TYPE_OREF, thr);
 }
 
-static bool isClassLoaded(const Thread *thread, const char *clsname)
+static bool isClassLoaded(Thread *thread, const char *clsname)
 {
 	JVM *jvm = (JVM *)thread->jvm;
 
@@ -2728,10 +2718,9 @@ static bool isClassLoaded(const Thread *thread, const char *clsname)
 }
 
 /* setting load to false prevents recursive hell */
-static const ClassFile *findClass2(Thread * thread, 
-		const char * clsname, const bool load)
+static ClassFile *findClass2(Thread * thread, const char * clsname, bool load)
 {
-	const ClassFile * ret = NULL;
+	ClassFile * ret = NULL;
 	JVM * jvm = (JVM *)thread->jvm;
 	int rc;
 	char buf[BUFSIZ];
@@ -2779,8 +2768,8 @@ static bool canCast(Thread *thread, const char *from, const char *to)
 	if (!strcmp("java/lang/Object", to)) return true;
 
 
-	const ClassFile *fromCls = findClass(thread, from);
-	const ClassFile *toCls = findClass(thread, to);
+	ClassFile *fromCls = findClass(thread, from);
+	ClassFile *toCls = findClass(thread, to);
 
 	if(!fromCls || !toCls) return false;
 
@@ -2811,14 +2800,13 @@ static bool canCast(Thread *thread, const char *from, const char *to)
 }
 
 /* not-jvm-safe */
-static const ClassFile *findClass(Thread *thread, const char *clsname)
+static ClassFile *findClass(Thread *thread, const char *clsname)
 {
 	assert(thread->jvm->VM == true);
 	return findClass2(thread, clsname, true);
 }
 
-static const method_info *findMethodByClass(Thread *thread, 
-		const ClassFile *cls, const char *mthname, const char *desc)
+static method_info *findMethodByClass(Thread *thread, ClassFile *cls, const char *mthname, const char *desc)
 {
 	//bool print = !strcmp(mthname, "add");
 	if (cls == NULL)
@@ -2838,7 +2826,7 @@ static const method_info *findMethodByClass(Thread *thread,
 	}
 
 	if (cls->interfaces_count > 0) {
-		const method_info *mi = NULL;
+		method_info *mi = NULL;
 		for (ssize_t i = 0; i < cls->interfaces_count; i++) {
 			if ((mi = findClassMethod(thread, 
 							cls->interface_class[i]->d.class.name->d.utf8.ascii, mthname, 
@@ -2851,23 +2839,21 @@ static const method_info *findMethodByClass(Thread *thread,
 		return NULL;
 }
 
-static const method_info *findClassMethod(Thread *thread, const char *clsname, 
-		const char *mthname, const char *desc)
+static method_info *findClassMethod(Thread *thread, const char *clsname, const char *mthname, const char *desc)
 {
 	assert(thread->jvm->VM == true);
 	//printf("findClassMethod: %s %s %s\n", clsname, mthname, desc);
-	const ClassFile *cls = findClass(thread, clsname);
+	ClassFile *cls = findClass(thread, clsname);
 	if (cls == NULL) return NULL;
 
 	return findMethodByClass(thread, cls, mthname, desc);
 }
 
-static const field_info *findClassField(Thread *thread, const char *clsname, 
-		const char *fldname)
+static field_info *findClassField(Thread *thread, const char *clsname, const char *fldname)
 {
 	assert(thread->jvm->VM == true);
 	//printf("findClassField: %s %s\n", clsname, fldname);
-	const ClassFile *cls = findClass(thread, clsname);
+	ClassFile *cls = findClass(thread, clsname);
 	if (cls == NULL) {
 		warnx("findClassField: no such class %s", clsname);
 		return NULL;
@@ -2876,8 +2862,7 @@ static const field_info *findClassField(Thread *thread, const char *clsname,
 	return findClassFieldForClass(thread, cls, fldname);
 }
 
-static const field_info *findClassFieldForClass(Thread *thread, 
-		const ClassFile *cls, const char *fldname)
+static field_info *findClassFieldForClass(Thread *thread, ClassFile *cls, const char *fldname)
 {
 	for (ssize_t i = 0; i < cls->fields_count; i++) {
 		if (!strcmp(cls->fields[i]->name->d.utf8.ascii, fldname)) {
@@ -2890,8 +2875,7 @@ static const field_info *findClassFieldForClass(Thread *thread,
 	return NULL;
 }
 
-static const attribute_info *findAttribute(const attribute_info **attrs, 
-		const uint16_t num, const char *name)
+static attribute_info *findAttribute(attribute_info **attrs, uint16_t num, const char *name)
 {
 	for(uint16_t i = 0; i < num; i++)
 		if (!strcmp(attrs[i]->name->d.utf8.ascii, name))
@@ -2905,7 +2889,7 @@ static Operand *classInit(Thread *thread, ClassFile *cls)
 
 	char buf[BUFSIZ] = {0};
 	int rc;
-	const method_info *mi = NULL;
+	method_info *mi = NULL;
 	Operand *ret = NULL;
 	Operand *ex_opr = NULL;
 
@@ -2932,14 +2916,14 @@ static Operand *classInit(Thread *thread, ClassFile *cls)
 			if (cls->fields[i]->attributes[j] && !strcmp("ConstantValue", 
 						cls->fields[i]->attributes[j]->name->d.utf8.ascii)) 
 			{
-				const attribute_info *ai = cls->fields[i]->attributes[j];
+				attribute_info *ai = cls->fields[i]->attributes[j];
 
 				if (ai->d.constant->op.type == TYPE_OREF) {
-					const field_info *fi = cls->fields[i];
+					field_info *fi = cls->fields[i];
 
 					if (ai->d.constant->op.val.vref == NULL) {
 						Object *tmp = NULL;
-						const cp_String_info *si = &ai->d.constant->entry->d.str;
+						cp_String_info *si = &ai->d.constant->entry->d.str;
 						if ((ex_opr = newStringFromChar(thread, si->intern, 
 										&tmp)) != NULL)
 							return ex_opr;
@@ -2968,8 +2952,7 @@ done:
 	return ret;
 }
 
-static Operand *getFieldInfo(Thread *thread, const ClassFile *cls, 
-		uint16_t which, const field_info **fld)
+static Operand *getFieldInfo(Thread *thread, ClassFile *cls, uint16_t which, field_info **fld)
 {
 	assert(thread->jvm->VM == true);
 	Operand *ret = NULL;
@@ -2984,8 +2967,8 @@ static Operand *getFieldInfo(Thread *thread, const ClassFile *cls,
 		return NULL;
 	}
 
-	const cp_info *cp = cls->constant_pool[which];
-	const field_info *fi = findClassField(thread, 
+	cp_info *cp = cls->constant_pool[which];
+	field_info *fi = findClassField(thread, 
 			cp->d.fr.class->d.class.name->d.utf8.ascii, 
 			cp->d.fr.nametype->d.nt.name->d.utf8.ascii);
 
@@ -3004,40 +2987,38 @@ static Operand *getFieldInfo(Thread *thread, const ClassFile *cls,
 	return NULL;
 }
 
-static uint16_t readShort(const uint8_t *code, int64_t *pc)
+static uint16_t readShort(uint8_t *code, int64_t *pc)
 {
-	const uint16_t ret = (uint16_t)(256U * code[(*pc)+1] + code[(*pc)+2]); 
+	uint16_t ret = (uint16_t)(256U * code[(*pc)+1] + code[(*pc)+2]); 
 	*pc += 2;
 	return ret;
 }
 
-static int32_t readInt(const uint8_t *code, int64_t *pc)
+static int32_t readInt(uint8_t *code, int64_t *pc)
 {
-	const int32_t ret = (int32_t)(16777216U * code[(*pc)] + 65536U * code[(*pc)+1] + 256U * code[(*pc)+2] + code[(*pc)+3]);
+	int32_t ret = (int32_t)(16777216U * code[(*pc)] + 65536U * code[(*pc)+1] + 256U * code[(*pc)+2] + code[(*pc)+3]);
 	*pc += 4;
 	return ret;
 }
 
-static int16_t readBranch(const uint8_t *code, int64_t *pc, 
-		const int16_t off)
+static int16_t readBranch(uint8_t *code, int64_t *pc, int16_t off)
 {
-	const int16_t bra = (int16_t)(256U * code[(*pc)+1] + code[(*pc)+2]); 
+	int16_t bra = (int16_t)(256U * code[(*pc)+1] + code[(*pc)+2]); 
 	*pc += 2;
 	return (int16_t)(bra - 3);
 }
 
-static Operand *ldc(int idx, Frame *cur_frame, const ClassFile *cls, 
-		Thread *thread, const int64_t pc)
+static Operand *ldc(int idx, Frame *cur_frame, ClassFile *cls, Thread *thread, int64_t pc)
 {
-	const cp_info *cp = cls->constant_pool[idx];
+	cp_info *cp = cls->constant_pool[idx];
 	Operand *ex_opr = NULL;
 
 	switch(cp->tag)
 	{
 		case CONSTANT_String:
 			{
-				const ClassFile *strcls;
-				const Object *o = newObject(thread,
+				ClassFile *strcls;
+				Object *o = newObject(thread,
 						strcls = findClass(thread, 
 							"java/lang/String"));
 
@@ -3046,7 +3027,7 @@ static Operand *ldc(int idx, Frame *cur_frame, const ClassFile *cls,
 						newOperand(TYPE_AREF, 
 							cp->d.str.intern));
 
-				const method_info *meth = 
+				method_info *meth = 
 					findMethodByClass(thread, 
 							strcls, "<init>", "([C)V");
 
@@ -3065,7 +3046,7 @@ static Operand *ldc(int idx, Frame *cur_frame, const ClassFile *cls,
 #ifdef DEBUG
 				printf("%s", cp->d.class.name->d.utf8.ascii);
 #endif
-				const ClassFile *cls = findClass(thread, cp->d.class.name->d.utf8.ascii);
+				ClassFile *cls = findClass(thread, cp->d.class.name->d.utf8.ascii);
 				if (!cls || !getClassObject(thread, (ClassFile *)cls)) 
 					return throw(thread, "java/lang/ClassNotFoundException", ERR_AT, pc);
 
@@ -3098,7 +3079,7 @@ static Operand *ldc(int idx, Frame *cur_frame, const ClassFile *cls,
 	return NULL;
 }
 
-static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_t pc_mod, int64_t *pcstore)
+static Operand *runCode(Thread *thread, Code_attribute *attr, int32_t pc_mod, int64_t *pcstore)
 {
 	int64_t pc		= 0 + pc_mod;
 	uint16_t tmpw	= 0;
@@ -3106,8 +3087,8 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 	Operand *ex_opr	= NULL;
 	bool running	= true;
 
-	const uint8_t *code		= attr->code;
-	const ClassFile *cls	= thread->cur_method->class;
+	uint8_t *code		= attr->code;
+	ClassFile *cls	= thread->cur_method->class;
 
 	Operand tmpOp;
 
@@ -3132,7 +3113,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 		}
 
 		Frame *cur_frame = currentFrame(thread);
-		const uint8_t opc = code[pc];
+		uint8_t opc = code[pc];
 #ifdef DEBUG
 		printf("%3ld: [%2x] ", pc, opc);
 #endif
@@ -3280,7 +3261,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 				break;
 			case 0x10: /* bipush */
 				{
-					const uint32_t big = code[++pc];
+					uint32_t big = code[++pc];
 #ifdef DEBUG
 					printf(ANSI_INSTR " bipush " ANSI_RESET "%d\n", big);
 #endif
@@ -3332,7 +3313,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					printf(ANSI_INSTR " ldc2_w " ANSI_RESET "%d\n", tmpw);
 #endif
 
-					const cp_info *cp = cls->constant_pool[tmpw];
+					cp_info *cp = cls->constant_pool[tmpw];
 
 					switch(cp->tag)
 					{
@@ -4019,8 +4000,8 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 #ifdef DEBUG
 					printf(ANSI_INSTR" dup\n" ANSI_RESET);
 #endif
-					const Operand *cur = cur_frame->stack[cur_frame->sp-1];
-					const Operand *new = dupOperand(cur);
+					Operand *cur = cur_frame->stack[cur_frame->sp-1];
+					Operand *new = dupOperand(cur);
 					push(cur_frame, new);
 				}
 				break;
@@ -4029,8 +4010,8 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 #ifdef DEBUG
 					printf(ANSI_INSTR " dup_x1\n" ANSI_RESET);
 #endif
-					const Operand *val1 = pop(cur_frame);
-					const Operand *val2 = pop(cur_frame);
+					Operand *val1 = pop(cur_frame);
+					Operand *val2 = pop(cur_frame);
 					push(cur_frame, dupOperand(val1));
 					push(cur_frame, val2);
 					push(cur_frame, val1);
@@ -4041,12 +4022,12 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 #ifdef DEBUG
 					printf(ANSI_INSTR " dup2\n" ANSI_RESET);
 #endif
-					const Operand *val1 = pop(cur_frame);
+					Operand *val1 = pop(cur_frame);
 					if (val1->type == TYPE_DOUBLE || val1->type == TYPE_LONG) {
 						push(cur_frame, dupOperand(val1));
 						push(cur_frame, val1);
 					} else {
-						const Operand *val2 = pop(cur_frame);
+						Operand *val2 = pop(cur_frame);
 						push(cur_frame, dupOperand(val2));
 						push(cur_frame, dupOperand(val1));
 						push(cur_frame, val2);
@@ -4704,7 +4685,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					pc += pad;
 					int32_t def = readInt(code, &pc);
 					const int32_t npairs = readInt(code, &pc);
-					const Operand *v = pop(cur_frame);
+					Operand *v = pop(cur_frame);
 #ifdef DEBUG	
 					printf(ANSI_INSTR " lookupswitch " ANSI_RESET "%d #%d == %d\n", def, npairs, v->val.vint);
 #endif
@@ -4777,7 +4758,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 #ifdef DEBUG
 					printf(ANSI_INSTR " getstatic" ANSI_RESET " #%d ", tmpw);
 #endif
-					const field_info *f = NULL;
+					field_info *f = NULL;
 					if ((ex_opr = getFieldInfo(thread, cls, tmpw, &f)) != NULL)
 						return ex_opr;
 					if (f == NULL)
@@ -4805,7 +4786,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					//tmpw = (uint16_t)(256U * code[pc+1] + code[pc+2]); pc += 2;
 					tmpw = readShort(code, &pc);
 					field_info *f = NULL;
-					if ((ex_opr = getFieldInfo(thread, cls, tmpw, (const field_info **)&f)) != NULL)
+					if ((ex_opr = getFieldInfo(thread, cls, tmpw, &f)) != NULL)
 						return ex_opr;
 
 #ifdef DEBUG
@@ -4830,7 +4811,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 				{
 					//tmpw = (uint16_t)(256U * code[pc+1] + code[pc+2]); pc += 2;
 					tmpw = readShort(code, &pc);
-					const field_info *fi = NULL;
+					field_info *fi = NULL;
 					if ((ex_opr = getFieldInfo(thread, cls, tmpw, &fi)) != NULL)
 						return ex_opr;
 #ifdef DEBUG
@@ -4846,8 +4827,8 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 							fi->descriptor->d.utf8.ascii
 						  );
 #endif
-					const Operand *o = pop(cur_frame);
-					const Object *obj = o->val.vref;
+					Operand *o = pop(cur_frame);
+					Object *obj = o->val.vref;
 
 					Field *fld = NULL;
 					for (int i = 0; i < obj->data.obj.num_fields; i++)
@@ -4872,7 +4853,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					tmpw = readShort(code, &pc);
 					field_info *fi = NULL;
 					if ((ex_opr = getFieldInfo(thread, cls, tmpw, 
-									(const field_info **)&fi)) != NULL)
+									(field_info **)&fi)) != NULL)
 						return ex_opr;
 #ifdef DEBUG
 					printf(ANSI_INSTR " putfield " ANSI_RESET " #%d ", tmpw);
@@ -4922,7 +4903,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 #ifdef DEBUG
 					printf(ANSI_INSTR " invokevirtual" ANSI_RESET " #%d ", tmpw);
 #endif
-					const cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
+					cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
 #ifdef DEBUG
 					printf("method_info %s %s %s\n", 
 							mi->class->d.class.name->d.utf8.ascii, 
@@ -4930,7 +4911,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);	
 #endif
 					/* used for num meths only */
-					const method_info *meth = findClassMethod(thread,
+					method_info *meth = findClassMethod(thread,
 							mi->class->d.class.name->d.utf8.ascii,
 							mi->nametype->d.nt.name->d.utf8.ascii,
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);
@@ -4939,7 +4920,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 						return throw(thread, "java/lang/ClassNotFoundException",
 								mi->class->d.class.name->d.utf8.ascii, pc);
 
-					const Operand *op_obj = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
+					Operand *op_obj = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
 
 					if (op_obj->type == TYPE_NULL)
 						return throw(thread, "java/lang/NullPointerException", 
@@ -4991,19 +4972,19 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 #ifdef DEBUG
 					printf(ANSI_INSTR " invokespecial" ANSI_RESET " #%d ", tmpw);
 #endif
-					const cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
+					cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
 #ifdef DEBUG
 					printf("method_info special: %s:%s %s\n",
 							mi->class->d.class.name->d.utf8.ascii,
 							mi->nametype->d.nt.name->d.utf8.ascii,
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);
 #endif
-					const method_info *meth = findClassMethod(thread,
+					method_info *meth = findClassMethod(thread,
 							mi->class->d.class.name->d.utf8.ascii,
 							mi->nametype->d.nt.name->d.utf8.ascii,
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);
 
-					const Operand *op_obj = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
+					Operand *op_obj = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
 
 					if (op_obj->type == TYPE_NULL)
 						return throw(thread, "java/lang/NullPointerException",
@@ -5040,7 +5021,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 #ifdef DEBUG
 					printf(ANSI_INSTR " invokestatic" ANSI_RESET " #%d ", tmpw);
 #endif
-					const cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
+					cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
 #ifdef DEBUG
 					printf("method_info static %s:%s %s\n",
 							mi->class->d.class.name->d.utf8.ascii,
@@ -5048,11 +5029,11 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);
 #endif
 					/* class containing static mehtod */
-					const ClassFile *class = (ClassFile *)findClass(thread, 
+					ClassFile *class = (ClassFile *)findClass(thread, 
 							mi->class->d.class.name->d.utf8.ascii);
 
 					/* static method */
-					const method_info *meth = findClassMethod(thread,
+					method_info *meth = findClassMethod(thread,
 							mi->class->d.class.name->d.utf8.ascii, 
 							mi->nametype->d.nt.name->d.utf8.ascii,
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);
@@ -5073,7 +5054,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 			case 0xb9: /* invokeinterface */
 				{
 					tmpw = readShort(code, &pc);
-					const cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
+					cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
 					pc++; // skip first field, which has a value
 					pc++; // skip blank field
 #ifdef DEBUG
@@ -5085,7 +5066,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 
 #endif
 					/* interface method defintion (for param count) */
-					const method_info *meth = findClassMethod(thread,
+					method_info *meth = findClassMethod(thread,
 							mi->class->d.class.name->d.utf8.ascii,
 							mi->nametype->d.nt.name->d.utf8.ascii,
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);
@@ -5099,7 +5080,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 								ERR_AT, pc);
 					}
 
-					const Operand *op_obj = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
+					Operand *op_obj = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
 					if (op_obj->type == TYPE_NULL)
 						return throw(thread, "java/lang/NullPointerException",
 								ERR_AT, pc);
@@ -5129,12 +5110,12 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 			case 0xbb: /* new */
 				{
 					tmpw = readShort(code, &pc);
-					const cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
+					cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
 #ifdef DEBUG
 					printf(ANSI_INSTR " new " ANSI_RESET "#%d ", tmpw);
 					printf("class %s\n", ci->name->d.utf8.ascii);
 #endif
-					const ClassFile *tmpcls = findClass(thread, ci->name->d.utf8.ascii);
+					ClassFile *tmpcls = findClass(thread, ci->name->d.utf8.ascii);
 					if (tmpcls == NULL) 
 						return throw(thread, "java/lang/ClassNotFoundException", 
 								ERR_AT, pc);
@@ -5172,7 +5153,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					if (cnt == NULL || cnt->type == TYPE_NULL)
 						errx(EXIT_FAILURE, "anewarray: cnt is NULL");
 					// FIXME store class from cp[tmpw]
-					const ClassFile *class = findClass(thread, cls->constant_pool[tmpw]->d.class.name->d.utf8.ascii);
+					ClassFile *class = findClass(thread, cls->constant_pool[tmpw]->d.class.name->d.utf8.ascii);
 					if (class == NULL)
 						return throw(thread, "java/lang/ClassNotFoundException",
 								ERR_AT, pc);
@@ -5216,7 +5197,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 						freeOperand(tmpop);
 					warnx("runCode: throw: %s", ex->val.vref->class->this_class->d.class.name->d.utf8.ascii);
 					
-					const method_info *mi = findMethodByClass(thread, ex->val.vref->class,
+					method_info *mi = findMethodByClass(thread, ex->val.vref->class,
 							"fillInStackTrace", "()Ljava/lang/Throwable;");
 
 					push(cur_frame, dupOperand(ex));
@@ -5231,7 +5212,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 			case 0xc0: /* checkcast */
 				{
 					tmpw = readShort(code, &pc);
-					const cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
+					cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
 					Operand *ref = pop(cur_frame);
 #ifdef DEBUG
 					printf(ANSI_INSTR " checkcast " ANSI_RESET "%s >= %s\n",
@@ -5253,7 +5234,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 					printf(ANSI_INSTR " instanceof\n" ANSI_RESET);
 #endif
 					Operand *ref = pop(cur_frame);
-					const cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
+					cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
 					tmpOp.val.vint = ref->val.vref->class == findClass(thread, ci->name->d.utf8.ascii);
 
 					push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
@@ -5347,7 +5328,7 @@ static Operand *runCode(Thread *thread, const Code_attribute *attr, const int32_
 	return NULL;
 }
 #ifdef DEBUG
-void dumpFrame(const Frame *f)
+void dumpFrame(Frame *f)
 {
 	if (!f) {
 		printf(" <<NULL>>\n");
@@ -5388,13 +5369,12 @@ void dumpFrame(const Frame *f)
 		printf("  stack: <<none>>\n");
 }
 #endif
-static Operand *invokeMethod(Thread *thread, const method_info *meth, 
-		const bool withObject, int64_t old_pc)
+static Operand *invokeMethod(Thread *thread, method_info *meth, bool withObject, int64_t old_pc)
 {
 	Frame *oldframe = thread->frame_free ? thread->stack[thread->frame_free-1] : NULL;
 	uint16_t num_operands, num_locals;
 	int64_t pc = 0;
-	const Code_attribute *code = NULL;
+	Code_attribute *code = NULL;
 	Operand *throw = NULL;
 	Object *th_obj = NULL;
 
@@ -5427,7 +5407,7 @@ static Operand *invokeMethod(Thread *thread, const method_info *meth,
 		num_operands = (uint16_t)(meth->desc.num_params + 13U); // FIXME this should be a max(return#, params#)
 		num_locals = (uint16_t)(meth->desc.num_params * 2U);
 	} else {
-		const attribute_info *ai = findAttribute(meth->attributes, meth->attributes_count, "Code");
+		attribute_info *ai = findAttribute(meth->attributes, meth->attributes_count, "Code");
 		if (!ai) errx(EXIT_FAILURE, "Missing code attribute for method (%s %s %s)", 
 				meth->class->this_class->d.class.name->d.utf8.ascii,
 				meth->name->d.utf8.ascii,
@@ -5454,7 +5434,7 @@ static Operand *invokeMethod(Thread *thread, const method_info *meth,
 		errx(EXIT_FAILURE, "invokeMethod: thread stack is full");
 
 	thread->stack[thread->frame_free++] = newframe;
-	const method_info *old_meth = thread->cur_method;
+	method_info *old_meth = thread->cur_method;
 	thread->cur_method = meth;
 	newframe->mi = meth;
 	newframe->class = meth->class;
@@ -5531,7 +5511,7 @@ redo:
 		if (meth->code && meth->code->exception_table_length) {
 			for (int i = 0; i < meth->code->exception_table_length; i++)
 			{
-				const exception *ex = meth->code->exception_table[i];
+				exception *ex = meth->code->exception_table[i];
 
 				if(pc < ex->start_pc || 
 						pc > ex->end_pc ||
@@ -5602,7 +5582,7 @@ redo:
 		return NULL;
 }
 
-static bool addClass(Thread *thread, const ClassFile *cf)
+static bool addClass(Thread *thread, ClassFile *cf)
 {
 	if (cf == NULL)
 		errx(EXIT_FAILURE, "addClass: Attempting to add NULL class");
@@ -5636,7 +5616,7 @@ static bool addClass(Thread *thread, const ClassFile *cf)
 	return true;
 }
 
-static Operand *dupOperand(const Operand * old)
+static Operand *dupOperand(Operand * old)
 {
 	assert(old);
 
@@ -5655,7 +5635,7 @@ static Operand *dupOperand(const Operand * old)
 	return new;
 }
 
-static Operand *newOperand(const uint8_t type, const void *value)
+static Operand *newOperand(uint8_t type, void *value)
 {
 	Operand * ret = calloc(1, sizeof(Operand)); // making this malloc causes SEGV?? FIXME
 	if (!ret) 
@@ -5707,16 +5687,15 @@ static void freeOperand(Operand * o)
 	}
 }
 
-static Operand *fileoutputstream_writeb(Thread *thread, const ClassFile *cls, 
-		Object *this)
+static Operand *fileoutputstream_writeb(Thread *thread, ClassFile *cls, Object *this)
 {
-	const Frame *cur_frame = currentFrame(thread);
+	Frame *cur_frame = currentFrame(thread);
 #ifdef DEBUG
 	//dumpFrame(cur_frame);
 #endif
 
-	const Field *fld = findFieldByName(this, "fdObj");
-	const Object *fdObj = fld->op->val.vref;
+	Field *fld = findFieldByName(this, "fdObj");
+	Object *fdObj = fld->op->val.vref;
 
 	fld = findFieldByName(fdObj, "fd");
 	const int fd = fld->op->val.vint;
@@ -5730,16 +5709,15 @@ static Operand *fileoutputstream_writeb(Thread *thread, const ClassFile *cls,
 	return NULL;
 }
 
-static Operand *fileoutputstream_writebarray(Thread *thread, const ClassFile *cls,
-		Object *this)
+static Operand *fileoutputstream_writebarray(Thread *thread, ClassFile *cls, Object *this)
 {
-	const Frame *cur_frame = currentFrame(thread);
+	Frame *cur_frame = currentFrame(thread);
 #ifdef DEBUG
 	//dumpFrame(cur_frame);
 #endif
-	const Field *fld = findFieldByName(this, "fdObj");
-	const Object *array = NULL;
-	const Object *fdObj = NULL;
+	Field *fld = findFieldByName(this, "fdObj");
+	Object *array = NULL;
+	Object *fdObj = NULL;
 	int fd = -1;
 	int8_t *buf = NULL;
 
@@ -5764,7 +5742,7 @@ static Operand *fileoutputstream_writebarray(Thread *thread, const ClassFile *cl
 
 	for (uint32_t i = 0; i < array->data.array.len; i++)
 	{
-		const Operand *op = array->data.array.data[i];
+		Operand *op = array->data.array.data[i];
 		if (!op)
 			buf[i] = 0;
 		else {
@@ -5814,7 +5792,7 @@ done:
 	return ret;
 }
 
-static Operand *javalangobject_getClass(Thread *thread, const ClassFile *cls, Object *this)
+static Operand *javalangobject_getClass(Thread *thread, ClassFile *cls, Object *this)
 {
 	Frame *cur_frame = currentFrame(thread);
 	//printf("getClass: %s @ %p\n", this->class->this_class->d.class.name->d.utf8.ascii, this->class);
@@ -5824,7 +5802,7 @@ static Operand *javalangobject_getClass(Thread *thread, const ClassFile *cls, Ob
 	return NULL;
 }
 
-static Operand *javalangobject_hashCode(Thread *thread, const ClassFile *cls, Object *this)
+static Operand *javalangobject_hashCode(Thread *thread, ClassFile *cls, Object *this)
 {
 	Frame *cur_frame = currentFrame(thread);
 	int32_t hash = (int32_t)((int64_t)this);
@@ -5832,7 +5810,7 @@ static Operand *javalangobject_hashCode(Thread *thread, const ClassFile *cls, Ob
 	return NULL;
 }
 
-static Operand *javalangthread_nativeStart(Thread *thread, const ClassFile *cls, Object *this)
+static Operand *javalangthread_nativeStart(Thread *thread, ClassFile *cls, Object *this)
 {
 	//Frame *cur_frame = currentFrame(thread);
 	//Operand *op_th = cur_frame->local[0];
@@ -5841,7 +5819,7 @@ static Operand *javalangthread_nativeStart(Thread *thread, const ClassFile *cls,
 	return NULL;
 }
 
-static Operand *javalangthread_sleep(Thread *thread, const ClassFile *cls)
+static Operand *javalangthread_sleep(Thread *thread, ClassFile *cls)
 {
 	Frame *cur_frame = currentFrame(thread);
 
@@ -5862,7 +5840,7 @@ static Operand *javalangthread_sleep(Thread *thread, const ClassFile *cls)
 	return NULL;
 }
 
-static Operand *javalangthread_currentThread(Thread *thread, const ClassFile *cls)
+static Operand *javalangthread_currentThread(Thread *thread, ClassFile *cls)
 {
 	Frame *cur_frame = currentFrame(thread);
 
@@ -5875,12 +5853,12 @@ static Operand *javalangthread_currentThread(Thread *thread, const ClassFile *cl
 	return NULL;
 }
 
-static Operand *javalangreflectarray_newInstance(Thread *thread, const ClassFile *cls)
+static Operand *javalangreflectarray_newInstance(Thread *thread, ClassFile *cls)
 {
 	return NULL;
 }
 
-static Operand *javalangsystem_exit(Thread *thread, const ClassFile *cls)
+static Operand *javalangsystem_exit(Thread *thread, ClassFile *cls)
 {
 	Frame *cur_frame = currentFrame(thread);
 	const Operand *rc_op = pop(cur_frame);
@@ -5888,7 +5866,7 @@ static Operand *javalangsystem_exit(Thread *thread, const ClassFile *cls)
 	exit(rc); // FIXME exit other threads?
 }
 
-static Operand *javalangsystem_currentTimeMillis(Thread *thread, const ClassFile *cls)
+static Operand *javalangsystem_currentTimeMillis(Thread *thread, ClassFile *cls)
 {
 	Frame *cur_frame = currentFrame(thread);
 
@@ -5905,7 +5883,7 @@ static Operand *javalangsystem_currentTimeMillis(Thread *thread, const ClassFile
 	return NULL;
 }
 
-static Operand *javalangclassloader_findClass(Thread *thread, const ClassFile *cls, Object *this)
+static Operand *javalangclassloader_findClass(Thread *thread, ClassFile *cls, Object *this)
 {
 	Frame *cur_frame = currentFrame(thread);
 	const Field *fld = NULL;
@@ -5943,7 +5921,7 @@ static Operand *javalangclassloader_findClass(Thread *thread, const ClassFile *c
 	return NULL;
 }
 
-static Operand *javalangclassloader_findLoadedClass(Thread *thread, const ClassFile *cls, Object *this)
+static Operand *javalangclassloader_findLoadedClass(Thread *thread, ClassFile *cls, Object *this)
 {
 	Frame *cur_frame = currentFrame(thread);
 	const Field *fld = NULL;
@@ -5977,11 +5955,11 @@ static Operand *javalangclassloader_findLoadedClass(Thread *thread, const ClassF
 	return NULL;
 }
 
-static Operand *javalangthrowable_fillInStackTrace(Thread *thread, const ClassFile *cls, Object *this)
+static Operand *javalangthrowable_fillInStackTrace(Thread *thread, ClassFile *cls, Object *this)
 {
 	Frame *cur_frame = currentFrame(thread);
 
-	const ClassFile *ste_c = findClass(thread, "java/lang/StackTraceElement");
+	ClassFile *ste_c = findClass(thread, "java/lang/StackTraceElement");
 	if (ste_c == NULL)
 		return NULL;
 
@@ -5996,7 +5974,7 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread, const ClassFi
 	fld->op = newOperand(TYPE_AREF, trace);
 
 	int arrpos = 0;
-	const method_info *mi = findMethodByClass(thread, ste_c, "<init>", 
+	method_info *mi = findMethodByClass(thread, ste_c, "<init>", 
 			"(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
 	Operand *ex_opr;
 	Object *str = NULL;
@@ -6009,7 +5987,7 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread, const ClassFi
 			continue;
 		}
 		
-		const Object *ste_o = newObject(thread, ste_c);
+		Object *ste_o = newObject(thread, ste_c);
 		if (!push(cur_frame, newOperand(TYPE_OREF, ste_o))) {
 			warnx("unable to push: " ERR_AT);
 			return NULL;
@@ -6115,7 +6093,7 @@ static const internalClass tmp_String = {
 };
 #endif
 
-static const internalClass java_lang_Throwable = {
+static internalClass java_lang_Throwable = {
 	.name = "java/lang/Throwable",
 	.access = ACC_PUBLIC,
 	.methods = {
@@ -6129,7 +6107,7 @@ static const internalClass java_lang_Throwable = {
 	}
 };
 
-static const internalClass java_lang_Object = {
+static internalClass java_lang_Object = {
 	.name = "java/lang/Object",
 	.access = ACC_PUBLIC,
 	.methods = {
@@ -6149,7 +6127,7 @@ static const internalClass java_lang_Object = {
 	}
 };
 
-static const internalClass java_io_FileOutputStream = {
+static internalClass java_io_FileOutputStream = {
 	.name = "java/io/FileOutputStream",
 	.access = ACC_PUBLIC,
 	.methods = {
@@ -6169,7 +6147,7 @@ static const internalClass java_io_FileOutputStream = {
 	}
 };
 
-static const internalClass java_lang_Thread = {
+static internalClass java_lang_Thread = {
 	.name = "java/lang/Thread",
 	.access = ACC_PUBLIC|ACC_FINAL,
 	.methods = {
@@ -6194,7 +6172,7 @@ static const internalClass java_lang_Thread = {
 	}
 };
 
-static const internalClass java_lang_reflect_Array = {
+static internalClass java_lang_reflect_Array = {
 	.name = "java/lang/reflect/Array",
 	.access = ACC_PUBLIC,
 	.methods = {
@@ -6208,7 +6186,7 @@ static const internalClass java_lang_reflect_Array = {
 	}
 };
 
-static const internalClass java_lang_System = {
+static internalClass java_lang_System = {
 	.name = "java/lang/System",
 	.access = ACC_PUBLIC|ACC_FINAL,
 	.methods = {
@@ -6228,7 +6206,7 @@ static const internalClass java_lang_System = {
 	}
 };
 
-static const internalClass java_lang_ClassLoader = {
+static internalClass java_lang_ClassLoader = {
 	.name = "java/lang/ClassLoader",
 	.access = ACC_ABSTRACT|ACC_PUBLIC,
 	.methods = {
@@ -6246,7 +6224,7 @@ static const internalClass java_lang_ClassLoader = {
 	}
 };
 
-ClassFile *buildInternalClass(const internalClass *ic)
+ClassFile *buildInternalClass(internalClass *ic)
 {
 	uint16_t cp_ptr = 1;
 
@@ -6384,7 +6362,7 @@ ClassFile *buildInternalClass(const internalClass *ic)
 		warn("buildInternalClass");
 		goto fail;
 	}
-	ret->constant_pool = (const cp_info **)tmp_cp;
+	ret->constant_pool = tmp_cp;
 	return ret;
 fail:
 	if (ret) {
@@ -6578,7 +6556,7 @@ static void dumpField(const int me, const field_info *fi)
 	}
 }
 
-static void dumpMethod(const int me, const method_info *mi)
+static void dumpMethod(const int me, method_info *mi)
 {
 	printf(" [%2d]: ", me);
 	char buf[BUFSIZ];
@@ -6621,8 +6599,7 @@ static bool findHeapSlot(Thread *thread, Object *obj)
 
 // FIXME common code with newObject
 
-static Object *newMultiArray(Thread *thread, const uint8_t type, 
-		uint32_t *sizes, const uint8_t dim, const ClassFile *clsType)
+static Object *newMultiArray(Thread *thread, uint8_t type, uint32_t *sizes, uint8_t dim, ClassFile *clsType)
 {
 	if (type == TYPE_NULL) {
 		warnx("newMultiArray: type is NULL");
@@ -6729,7 +6706,7 @@ fail:
 
 }
 
-static Object *newArray(Thread *thread, const uint8_t type, const uint32_t size, const ClassFile *clsType)
+static Object *newArray(Thread *thread, uint8_t type, uint32_t size, ClassFile *clsType)
 {
 	uint32_t *sizes = calloc(1, sizeof(uint32_t));
 	if (sizes == NULL) return NULL;
@@ -6739,7 +6716,7 @@ static Object *newArray(Thread *thread, const uint8_t type, const uint32_t size,
 	return newMultiArray(thread, type, sizes, 1U, clsType);
 }
 
-static uint16_t getSuperFieldCount(const Thread *thread, const ClassFile *cls)
+static uint16_t getSuperFieldCount(Thread *thread, ClassFile *cls)
 {
 	assert(thread->jvm->VM == true);
 	//printf("getSuperFieldCount: %s\n", cls->this_class->name->ascii);
@@ -6753,7 +6730,7 @@ static uint16_t getSuperFieldCount(const Thread *thread, const ClassFile *cls)
 	return 0;
 }
 
-static Object *newObject(Thread *thread, const ClassFile *cls)
+static Object *newObject(Thread *thread, ClassFile *cls)
 {
 	uint32_t fldptr = 0;
 	const ClassFile *super = cls;
@@ -6862,7 +6839,7 @@ fail:
 	return NULL;
 }
 #ifdef DEBUG
-void dumpClass(const ClassFile *cf)
+void dumpClass(ClassFile *cf)
 {
 	char buf[BUFSIZ];
 
@@ -7501,7 +7478,7 @@ static void cleanup(void)
 	fclose(stderr);
 }
 
-static ClassFile *processNatives(Thread *thread, const internalClass *ic)
+static ClassFile *processNatives(Thread *thread, internalClass *ic)
 {
 	ClassFile *cf = NULL;
 
@@ -7696,7 +7673,7 @@ static void *threadinit(void *arg)
 			freeOperand(dup);
 			warnx("threadinit: failed to push thrown object: %d/%d", cur_frame->sp, cur_frame->num_stack);
 		} else {
-			const method_info *mi = findMethodByClass(self, 
+			method_info *mi = findMethodByClass(self, 
 					((Operand *)ret)->val.vref->class,
 					"printStackTrace", "()V");
 			freeOperand(ret);
@@ -7730,7 +7707,7 @@ static Operand *startThread(Thread *thread)
 	Object *th_obj = thread->thread;
 
 	if (thread->cur_method == NULL) {
-		const method_info *meth = findMethodByClass(thread,
+		method_info *meth = findMethodByClass(thread,
 				th_obj->class, "run", "()V");
 		thread->cur_method = meth;
 	}
@@ -7880,7 +7857,7 @@ int main(const int ac, const char *av[])
 	/* load primitive classes */
 	for (ssize_t i = 0; primitiveClassMap[i].c_name; i++)
 	{
-		const ClassFile *cls = findClass(parent, primitiveClassMap[i].c_name);
+		ClassFile *cls = findClass(parent, primitiveClassMap[i].c_name);
 		if (cls == NULL) {
 			warnx("boot: unable to load %s", primitiveClassMap[i].c_name);
 			continue;
@@ -7890,7 +7867,7 @@ int main(const int ac, const char *av[])
 				errx(EXIT_FAILURE, "boot: error thrown in %s", primitiveClassMap[i].c_name);
 		}
 
-		const field_info *fi = findClassFieldForClass(parent, cls, "TYPE");
+		field_info *fi = findClassFieldForClass(parent, cls, "TYPE");
 		if (fi == NULL) {
 			warnx("boot: field TYPE missing for %s", primitiveClassMap[i].c_name);
 			continue;
@@ -7914,7 +7891,7 @@ int main(const int ac, const char *av[])
 	linkClass(parent, cf);
 	
 	const char *clsname = ac > 2 ? av[2] : av[1];
-	const method_info *m_Main = findClassMethod(parent, clsname, "main", "([Ljava/lang/String;)V");
+	method_info *m_Main = findClassMethod(parent, clsname, "main", "([Ljava/lang/String;)V");
 	if (m_Main == NULL)
 		errx(EXIT_FAILURE, "boot: Cannot find method main in class %s", clsname);
 	
