@@ -3,7 +3,7 @@ fail-jvm is a partial implementation of the following:
 ## The Java(R) Virtual Machine specification, Java SE 7 Edition
 
 * class File parsing
-* 136 / 200+ JVM instructions ("byte code")
+* 148 / 201 JVM instructions ("byte code")
 * threading, monitor locks
 
 ## The Java(R) Platform, Standard Edition 6, API Specification
