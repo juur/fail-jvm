@@ -4120,6 +4120,42 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					freeOperand(two);
 				}
 				break;
+            case 0x62: /* fadd */
+                {
+                    Operand *two = pop(cur_frame);
+                    Operand *one = pop(cur_frame);
+
+                    tmpOp.val.vfloat = one->val.vfloat + two->val.vfloat;
+                    Operand *res = newOperand(TYPE_FLOAT, &tmpOp.val.vfloat);
+#ifdef DEBUG
+                    printf(ANSI_INSTR " fadd " ANSI_RESET "%ld+%ld=%ld\n",
+                            one->val.vfloat,
+                            two->val.vfloat,
+                            res->val.vfloat);
+#endif
+                    push(cur_frame, res);
+                    freeOperand(one);
+                    freeOperand(two);
+                }
+                break;
+			case 0x63: /* dadd */
+                {
+                    Operand *two = pop(cur_frame);
+                    Operand *one = pop(cur_frame);
+
+                    tmpOp.val.vdouble = one->val.vdouble + two->val.vdouble;
+                    Operand *res = newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble);
+#ifdef DEBUG
+                    printf(ANSI_INSTR " dadd " ANSI_RESET "%ld+%ld=%ld\n",
+                            one->val.vdouble,
+                            two->val.vdouble,
+                            res->val.vdouble);
+#endif
+                    push(cur_frame, res);
+                    freeOperand(one);
+                    freeOperand(two);
+                }
+                break;
 			case 0x64: /* isub */
 				{
 					Operand *one = pop(cur_frame);
@@ -4156,6 +4192,42 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					freeOperand(two);
 				}
 				break;
+            case 0x66: /* fsub */
+                {
+                    Operand *one = pop(cur_frame);
+                    Operand *two = pop(cur_frame);
+
+                    tmpOp.val.vfloat = two->val.vfloat - one->val.vfloat;
+                    Operand *res = newOperand(TYPE_FLOAT, &tmpOp.val.vfloat);
+#ifdef DEBUG
+                    printf(ANSI_INSTR " fsub " ANSI_RESET "%ld-%ld=%ld\n",
+                            two->val.vfloat,
+                            one->val.vfloat,
+                            res->val.vfloat);
+#endif
+                    push(cur_frame, res);
+                    freeOperand(one);
+                    freeOperand(two);
+                }
+                break;
+            case 0x67: /* dsub */
+                {
+                    Operand *one = pop(cur_frame);
+                    Operand *two = pop(cur_frame);
+
+                    tmpOp.val.vdouble = two->val.vdouble - one->val.vdouble;
+                    Operand *res = newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble);
+#ifdef DEBUG
+                    printf(ANSI_INSTR " dsub " ANSI_RESET "%ld-%ld=%ld\n",
+                            two->val.vdouble,
+                            one->val.vdouble,
+                            res->val.vdouble);
+#endif
+                    push(cur_frame, res);
+                    freeOperand(one);
+                    freeOperand(two);
+                }
+                break;
 			case 0x68: /* imul */
 				{
 					Operand *one = pop(cur_frame);
@@ -4174,6 +4246,24 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					freeOperand(two);
 				}
 				break;
+            case 0x69: /* lmul */
+                {
+                    Operand *one = pop(cur_frame);
+                    Operand *two = pop(cur_frame);
+
+                    tmpOp.val.vlong = one->val.vlong * two->val.vlong;
+                    Operand *res = newOperand(TYPE_LONG, &tmpOp.val.vlong);
+#ifdef DEBUG
+                    printf(ANSI_INSTR " lmul " ANSI_RESET "%d*%d=%d\n",
+                            one->val.vlong,
+                            two->val.vlong,
+                            res->val.vlong);
+#endif
+                    push(cur_frame, res);
+                    freeOperand(one);
+                    freeOperand(two);
+                }
+                break;
 			case 0x6a: /* fmul */
 				{
 					Operand *two = pop(cur_frame);
@@ -4188,6 +4278,24 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					freeOperand(two);
 				}
 				break;
+            case 0x6b: /* dmul */
+                {
+                    Operand *one = pop(cur_frame);
+                    Operand *two = pop(cur_frame);
+
+                    tmpOp.val.vdouble = one->val.vdouble * two->val.vdouble;
+                    Operand *res = newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble);
+#ifdef DEBUG
+                    printf(ANSI_INSTR " dmul " ANSI_RESET "%d*%d=%d\n",
+                            one->val.vdouble,
+                            two->val.vdouble,
+                            res->val.vdouble);
+#endif
+                    push(cur_frame, res);
+                    freeOperand(one);
+                    freeOperand(two);
+                }
+                break;				
 			case 0x6c: /* idiv */
 				{
 					Operand *two = pop(cur_frame);
@@ -4218,6 +4326,36 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					freeOperand(two);
 				}
 				break;
+            case 0x6e: /* fdiv */
+                {
+                    Operand *two = pop(cur_frame);
+                    Operand *one = pop(cur_frame);
+                    tmpOp.val.vfloat = one->val.vfloat / two->val.vfloat;
+#ifdef DEBUG
+                    printf(ANSI_INSTR " fdiv" ANSI_RESET " %ld/%ld=%ld\n",
+                            one->val.vfloat, two->val.vfloat,
+                            tmpOp.val.vfloat);
+#endif
+                    push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vfloat));
+                    freeOperand(one);
+                    freeOperand(two);
+                }
+                break;			
+            case 0x6f: /* ddiv */
+                {
+                    Operand *two = pop(cur_frame);
+                    Operand *one = pop(cur_frame);
+                    tmpOp.val.vdouble = one->val.vdouble / two->val.vdouble;
+#ifdef DEBUG
+                    printf(ANSI_INSTR " ddiv" ANSI_RESET " %ld/%ld=%ld\n",
+                            one->val.vdouble, two->val.vdouble,
+                            tmpOp.val.vdouble);
+#endif
+                    push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vdouble));
+                    freeOperand(one);
+                    freeOperand(two);
+                }
+                break;				
 			case 0x70: /* irem */
 				{
 #ifdef DEBUG
@@ -4803,6 +4941,17 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 				{
 #ifdef DEBUG
 					printf(ANSI_INSTR "freturn\n" ANSI_RESET);
+#endif
+					Operand *o = pop(cur_frame);
+					if (o == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					cur_frame->ret = o;
+					running = false;
+				}
+				break;
+			case 0xaf: /* dreturn */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR "dreturn\n" ANSI_RESET);
 #endif
 					Operand *o = pop(cur_frame);
 					if (o == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
