@@ -4411,6 +4411,17 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					freeOperand(one);
 				}
 				break;
+			case 0x75: /* lneg */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR "lneg\n" ANSI_RESET);
+#endif
+					Operand *one = pop(cur_frame);
+					tmpOp.val.vlong = -one->val.vlong;
+					push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
+					freeOperand(one);
+				}
+				break;
 			case 0x78: /* ishl */
 				{
 					Operand *two = pop(cur_frame);
@@ -4566,6 +4577,52 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
 					freeOperand(two);
 					freeOperand(one);
+				}
+				break;
+			case 0x97: /* dcmpl */
+				{
+					Operand *two = pop(cur_frame);
+					Operand *one = pop(cur_frame);
+#ifdef DEBUG
+					printf(ANSI_INSTR " dcmpl " ANSI_RESET "%lf ? %lf\n",
+							one->val.vdouble, two->val.vdouble);
+#endif
+					int32_t res = 0;
+
+					if (isnan(one->val.vdouble) || isnan(two->val.vdouble))
+						res = 1;
+					else if (one->val.vdouble < two->val.vdouble)
+						res = 1;
+					else if (one->val.vdouble > two->val.vdouble)
+						res = -1;
+
+					push(cur_frame, newOperand(TYPE_INT, &res));
+
+					freeOperand(one);
+					freeOperand(two);
+				}
+				break;
+			case 0x98: /* dcmpg */
+				{
+					Operand *two = pop(cur_frame);
+					Operand *one = pop(cur_frame);
+#ifdef DEBUG
+					printf(ANSI_INSTR " dcmpl " ANSI_RESET "%lf ? %lf\n",
+							one->val.vdouble, two->val.vdouble);
+#endif
+					int32_t res = 0;
+
+					if (isnan(one->val.vdouble) || isnan(two->val.vdouble))
+						res = -1;
+					else if (one->val.vdouble < two->val.vdouble)
+						res = 1;
+					else if (one->val.vdouble > two->val.vdouble)
+						res = -1;
+
+					push(cur_frame, newOperand(TYPE_INT, &res));
+
+					freeOperand(one);
+					freeOperand(two);
 				}
 				break;
 			case 0x99: /* ifeq */
@@ -6050,6 +6107,18 @@ done:
 	return ret;
 }
 
+static Operand *javalangmath_sin(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = pop(cur_frame);
+
+	double r = sin(a->val.vdouble);
+	freeOperand(a);
+	push(cur_frame, newOperand(TYPE_DOUBLE, &r));
+
+	return NULL;
+}
+
 static Operand *javalangobject_getClass(Thread *thread, ClassFile *cls, Object *this)
 {
 	Frame *cur_frame = currentFrame(thread);
@@ -6479,6 +6548,19 @@ static internalClass java_lang_ClassLoader = {
 			.meth.mvirtual = javalangclassloader_findClass
 		},
 		{.name = NULL}
+	}
+};
+
+static internalClass java_lang_Math = {
+	.name = "java/lang/Math",
+	.access = ACC_FINAL|ACC_PUBLIC,
+	.methods = {
+		{
+			.name = "sin",
+			.desc = "(D)D",
+			.meth.mstatic = javalangmath_sin
+		},
+		{.name=NULL}
 	}
 };
 
@@ -8108,6 +8190,8 @@ int main(const int ac, const char *av[])
 	cf = processNatives(parent, &java_lang_reflect_Array);
 	if (cf == NULL) exit(1);
 	cf = processNatives(parent, &java_lang_ClassLoader);
+	if (cf == NULL) exit(1);
+	cf = processNatives(parent, &java_lang_Math);
 	if (cf == NULL) exit(1);
 
 

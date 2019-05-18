@@ -17,4 +17,11 @@ public final class Math {
     return a < b ? a : b;
   }
 
+  public static native double atan2(double y, double x);
+  public static native double hypot(double y, double x);
+  public static native double cos(double a);
+  public static native double cosh(double a);
+  public static native double sin(double a);
+  public static native double sinh(double a);
+  public static native double exp(double a);
 }

@@ -41,6 +41,10 @@ public final class Double extends Number implements Comparable<Double> {
     value = val;
   }
 
+  public Double(final double val) {
+    value = val;
+  }
+
   @Override
   public int compareTo(final Double o) {
     return (int) (value - o.value);
@@ -66,4 +70,15 @@ public final class Double extends Number implements Comparable<Double> {
     return (long) value;
   }
 
+  public static Double valueOf(double d)
+  {
+	  return new Double(d);
+  }
+
+  public static Double valueOf(String s)
+  {
+	  double val = 0f;
+
+	  return valueOf(val);
+  }
 }
