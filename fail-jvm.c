@@ -3826,6 +3826,34 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
 				}
 				break;
+			case 0x38: /* fstore */
+				{
+					tmp = code[++pc];
+					Operand *val = pop(cur_frame);
+#ifdef DEBUG
+					printf(ANSI_INSTR " fstore "ANSI_RESET"%s.%s => %d\n", 
+							printOpType(val->type),
+							printOpValue(val),
+							tmp);
+#endif
+					if(setLocal(cur_frame, tmp, val) == NULL)
+						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+				}
+				break;
+			case 0x39: /* dstore */
+				{
+					tmp = code[++pc];
+					Operand *val = pop(cur_frame);
+#ifdef DEBUG
+					printf(ANSI_INSTR " dstore "ANSI_RESET"%s.%s => %d\n", 
+							printOpType(val->type),
+							printOpValue(val),
+							tmp);
+#endif
+					if(setLocal(cur_frame, tmp, val) == NULL)
+						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+				}
+				break;
 			case 0x3a: /* astore */
 				{
 					tmp = code[++pc];
@@ -3881,6 +3909,45 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
 #endif
 					if(setLocal(cur_frame,3,a) == NULL)
+						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+				}
+				break;
+			case 0x47: /* dstore_0 */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR "dstore_0\n" ANSI_RESET);
+#endif
+					if(setLocal(cur_frame,0,pop(cur_frame)) == NULL)
+						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+				}
+				break;
+
+			case 0x48: /* dstore_1 */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR "dstore_1\n" ANSI_RESET);
+#endif
+					if(setLocal(cur_frame,1,pop(cur_frame)) == NULL)
+						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+				}
+				break;
+
+			case 0x49: /* dstore_2 */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR "dstore_2\n" ANSI_RESET);
+#endif
+					if(setLocal(cur_frame,2,pop(cur_frame)) == NULL)
+						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+				}
+				break;
+
+			case 0x4a: /* dstore_3 */
+				{
+#ifdef DEBUG
+					printf(ANSI_INSTR "dstore_3\n" ANSI_RESET);
+#endif
+					if(setLocal(cur_frame,3,pop(cur_frame)) == NULL)
 						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
 				}
 				break;
@@ -4427,6 +4494,28 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					freeOperand(one);
 				}
 				break;
+            case 0x76: /* fneg */
+                {
+#ifdef DEBUG
+                    printf(ANSI_INSTR "fneg\n" ANSI_RESET);
+#endif
+                    Operand *one = pop(cur_frame);
+                    tmpOp.val.vfloat = -one->val.vfloat;
+                    push(cur_frame, newOperand(TYPE_FLOAT, &tmpOp.val.vfloat));
+                    freeOperand(one);
+                }
+                break;
+            case 0x77: /* dneg */
+                {
+#ifdef DEBUG
+                    printf(ANSI_INSTR "dneg\n" ANSI_RESET);
+#endif
+                    Operand *one = pop(cur_frame);
+                    tmpOp.val.vdouble = -one->val.vdouble;
+                    push(cur_frame, newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble));
+                    freeOperand(one);
+                }
+                break;				
 			case 0x78: /* ishl */
 				{
 					Operand *two = pop(cur_frame);
@@ -6660,7 +6749,7 @@ static internalClass java_lang_Double = {
 	.name = "java/lang/Double",
 	.methods = {
 		{ .name = "longBitsToDouble",	.desc = "(J)D", .meth.mstatic = javalangdouble_longBitsToDouble },
-		{ .name = "doubleToRawLongBits",.desc = "(J)D", .meth.mstatic = javalangdouble_doubleToRawLongBits },
+		{ .name = "doubleToRawLongBits",.desc = "(D)J", .meth.mstatic = javalangdouble_doubleToRawLongBits },
 		{.name=NULL}
 	}
 };

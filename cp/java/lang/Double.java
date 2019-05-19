@@ -38,7 +38,7 @@ public final class Double extends Number implements Comparable<Double> {
   private final double value;
 
   public static native double longBitsToDouble(long bits);
-  public static native double doubleToRawLongBits(double value);
+  public static native long doubleToRawLongBits(double value);
 
   public Double(final float val) {
     value = val;
