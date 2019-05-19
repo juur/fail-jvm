@@ -34,6 +34,10 @@ public final class StringBuilder {
     return append(Long.toString(a));
   }
 
+  public StringBuilder append(final double a) {
+	  return append(Double.toString(a));
+  }
+
   public StringBuilder append(final Object a) {
     return append(a.toString());
   }

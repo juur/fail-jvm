@@ -397,6 +397,7 @@ typedef struct {
 #define ITEM_Top				0
 #define	ITEM_Integer			1
 #define ITEM_Float				2
+#define ITEM_Double				3
 #define ITEM_Long				4
 #define	ITEM_Null				5
 #define ITEM_UninitialisedThis	6
@@ -835,7 +836,7 @@ static char *printOpValue(Operand *op)
 	return buf;
 }
 
-void dumpStack(Frame *frame, const char *op)
+void dumpStack(Frame *frame, char *op)
 {
 	if (!frame->sp) {
 		printf(" %4s\t<now empty>\n", op);
@@ -1395,6 +1396,7 @@ static union verification_type_info *readVerificationTypeInfo(FILE *f)
 		case ITEM_Float:
 		case ITEM_Null:
 		case ITEM_Long:
+		case ITEM_Double:
 		case ITEM_UninitialisedThis:
 			{
 				if ((ret = calloc(1, sizeof(union verification_type_info))) == NULL)
@@ -3262,7 +3264,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 				{
 					tmpOp.val.vint = code[++pc];
 #ifdef DEBUG
-					printf(ANSI_INSTR " bipush " ANSI_RESET "%d\n", big);
+					printf(ANSI_INSTR " bipush " ANSI_RESET "%d\n", tmpOp.val.vint);
 #endif
 					push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
 				}
@@ -3520,7 +3522,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpType(cur_frame->local[1]->type),
 							printOpValue(cur_frame->local[1]));
 #endif
-					if(!push(cur_frame, dupOperand(getLocal(cur_frame,1))))
+					Operand *o = getLocal(cur_frame,1);
+					if(o == NULL || o->type == TYPE_NULL)
+						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+					if(!push(cur_frame, dupOperand(o)))
 						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
 				}
 				break;
@@ -6110,12 +6115,181 @@ done:
 static Operand *javalangmath_sin(Thread *thread, ClassFile *cls)
 {
 	Frame *cur_frame = currentFrame(thread);
-	Operand *a = pop(cur_frame);
+	Operand *a = cur_frame->local[0];
 
 	double r = sin(a->val.vdouble);
-	freeOperand(a);
-	push(cur_frame, newOperand(TYPE_DOUBLE, &r));
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
 
+	return NULL;
+}
+
+static Operand *javalangmath_sinh(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double r = sinh(a->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangmath_cos(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double r = cos(a->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangmath_cosh(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double r = cosh(a->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangmath_atan2(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *b = cur_frame->local[1];
+	Operand *a = cur_frame->local[0];
+
+	double r = atan2(a->val.vdouble, b->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangmath_atan(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double r = atan(a->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangmath_acos(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double r = acos(a->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangmath_asin(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double r = asin(a->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangmath_log(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double r = log(a->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangmath_log10(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double r = log10(a->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangmath_log1p(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double r = log1p(a->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+
+static Operand *javalangmath_exp(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double r = exp(a->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangmath_hypot(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *b = cur_frame->local[1];
+	Operand *a = cur_frame->local[0];
+
+	double r = hypot(a->val.vdouble, b->val.vdouble);
+	
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &r);
+
+	return NULL;
+}
+
+static Operand *javalangdouble_doubleToRawLongBits(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	double val = a->val.vdouble;
+	long ret = (long)val;
+	cur_frame->ret = newOperand(TYPE_LONG, &ret);
+	return NULL;
+}
+
+static Operand *javalangdouble_longBitsToDouble(Thread *thread, ClassFile *cls)
+{
+	Frame *cur_frame = currentFrame(thread);
+	Operand *a = cur_frame->local[0];
+
+	long val = a->val.vlong;
+	double ret = (double)val;
+	cur_frame->ret = newOperand(TYPE_DOUBLE, &ret);
 	return NULL;
 }
 
@@ -6422,144 +6596,92 @@ static const internalClass tmp_String = {
 
 static internalClass java_lang_Throwable = {
 	.name = "java/lang/Throwable",
-	.access = ACC_PUBLIC,
 	.methods = {
-		{
-			.name = "fillInStackTrace",
-			.desc = "()Ljava/lang/Throwable;",
-			.access = ACC_PUBLIC|ACC_NATIVE,
-			.meth.mvirtual = javalangthrowable_fillInStackTrace
-		},
+		{ .name = "fillInStackTrace", .desc = "()Ljava/lang/Throwable;", .meth.mvirtual = javalangthrowable_fillInStackTrace },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_lang_Object = {
 	.name = "java/lang/Object",
-	.access = ACC_PUBLIC,
 	.methods = {
-		{
-			.name = "hashCode",
-			.desc = "()I",
-			.access = ACC_PUBLIC|ACC_NATIVE,
-			.meth.mvirtual = javalangobject_hashCode
-		},
-		{
-			.name = "getClass",
-			.desc = "()Ljava/lang/Class;",
-			.access = ACC_PUBLIC|ACC_NATIVE,
-			.meth.mvirtual = javalangobject_getClass
-		},
+		{ .name = "hashCode", .desc = "()I",				.meth.mvirtual = javalangobject_hashCode },
+		{ .name = "getClass", .desc = "()Ljava/lang/Class;",.meth.mvirtual = javalangobject_getClass },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_io_FileOutputStream = {
 	.name = "java/io/FileOutputStream",
-	.access = ACC_PUBLIC,
 	.methods = {
-		{
-			.name = "write",
-			.desc = "(I)V",
-			.access = ACC_PUBLIC|ACC_NATIVE,
-			.meth.mvirtual = fileoutputstream_writeb
-		},
-		{
-			.name = "write",
-			.desc = "([B)V",
-			.access = ACC_PUBLIC|ACC_NATIVE,
-			.meth.mvirtual = fileoutputstream_writebarray
-		},
+		{ .name = "write", .desc = "(I)V",	.meth.mvirtual = fileoutputstream_writeb },
+		{ .name = "write", .desc = "([B)V", .meth.mvirtual = fileoutputstream_writebarray },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_lang_Thread = {
 	.name = "java/lang/Thread",
-	.access = ACC_PUBLIC|ACC_FINAL,
 	.methods = {
-		{
-			.name = "nativeStart",
-			.desc = "()V",
-			.access = ACC_PUBLIC|ACC_NATIVE,
-			.meth.mvirtual = javalangthread_nativeStart
-		},
-		{
-			.name = "sleep",
-			.desc = "(JI)V",
-			.access = ACC_PUBLIC|ACC_NATIVE,
-			.meth.mstatic = javalangthread_sleep
-		},
-		{
-			.name = "currentThread",
-			.desc = "()Ljava/lang/Thread;",
-			.meth.mstatic = javalangthread_currentThread
-		},
+		{ .name = "nativeStart",	.desc = "()V",					.meth.mvirtual = javalangthread_nativeStart },
+		{ .name = "sleep",			.desc = "(JI)V",				.meth.mstatic = javalangthread_sleep },
+		{ .name = "currentThread",	.desc = "()Ljava/lang/Thread;", .meth.mstatic = javalangthread_currentThread },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_lang_reflect_Array = {
 	.name = "java/lang/reflect/Array",
-	.access = ACC_PUBLIC,
 	.methods = {
-		{
-			.name = "newInstance",
-			.desc = "(Ljava/lang/Class;[I)Ljava/lang/Object;",
-			.access = ACC_STATIC|ACC_PUBLIC,
-			.meth.mstatic = javalangreflectarray_newInstance
-		},
+		{ .name = "newInstance", .desc = "(Ljava/lang/Class;[I)Ljava/lang/Object;", .meth.mstatic = javalangreflectarray_newInstance },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_lang_System = {
 	.name = "java/lang/System",
-	.access = ACC_PUBLIC|ACC_FINAL,
 	.methods = {
-		{
-			.name = "exit",
-			.desc = "(I)V",
-			.access = ACC_STATIC|ACC_PUBLIC,
-			.meth.mstatic = javalangsystem_exit
-		},
-		{
-			.name = "currentTimeMillis",
-			.desc = "()J",
-			.access = ACC_STATIC|ACC_PUBLIC,
-			.meth.mstatic = javalangsystem_currentTimeMillis
-		},
+		{ .name = "exit",				.desc = "(I)V", .meth.mstatic = javalangsystem_exit },
+		{ .name = "currentTimeMillis",	.desc = "()J",	.meth.mstatic = javalangsystem_currentTimeMillis },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_lang_ClassLoader = {
 	.name = "java/lang/ClassLoader",
-	.access = ACC_ABSTRACT|ACC_PUBLIC,
 	.methods = {
-		{
-			.name = "findLoadedClass",
-			.desc = "(Ljava/lang/String;)Ljava/lang/Class;",
-			.meth.mvirtual = javalangclassloader_findLoadedClass
-		},
-		{
-			.name = "findClass",
-			.desc = "(Ljava/lang/String;)Ljava/lang/Class;",
-			.meth.mvirtual = javalangclassloader_findClass
-		},
+		{ .name = "findLoadedClass",	.desc = "(Ljava/lang/String;)Ljava/lang/Class;", .meth.mvirtual = javalangclassloader_findLoadedClass },
+		{ .name = "findClass",			.desc = "(Ljava/lang/String;)Ljava/lang/Class;", .meth.mvirtual = javalangclassloader_findClass },
 		{.name = NULL}
+	}
+};
+
+static internalClass java_lang_Double = {
+	.name = "java/lang/Double",
+	.methods = {
+		{ .name = "longBitsToDouble",	.desc = "(J)D", .meth.mstatic = javalangdouble_longBitsToDouble },
+		{ .name = "doubleToRawLongBits",.desc = "(J)D", .meth.mstatic = javalangdouble_doubleToRawLongBits },
+		{.name=NULL}
 	}
 };
 
 static internalClass java_lang_Math = {
 	.name = "java/lang/Math",
-	.access = ACC_FINAL|ACC_PUBLIC,
 	.methods = {
-		{
-			.name = "sin",
-			.desc = "(D)D",
-			.meth.mstatic = javalangmath_sin
-		},
+		{ .name = "atan2",	.desc = "(DD)D",.meth.mstatic = javalangmath_atan2 },
+		{ .name = "hypot",	.desc = "(DD)D",.meth.mstatic = javalangmath_hypot },
+		{ .name = "acos",	.desc = "(D)D",	.meth.mstatic = javalangmath_acos },
+		{ .name = "asin",	.desc = "(D)D", .meth.mstatic = javalangmath_asin },
+		{ .name = "atan",	.desc = "(D)D", .meth.mstatic = javalangmath_atan },
+		{ .name = "atan2",	.desc = "(D)D", .meth.mstatic = javalangmath_atan2 },
+		{ .name = "cos",	.desc = "(D)D", .meth.mstatic = javalangmath_cos },
+		{ .name = "cosh",	.desc = "(D)D", .meth.mstatic = javalangmath_cosh },
+		{ .name = "sin",	.desc = "(D)D", .meth.mstatic = javalangmath_sin },
+		{ .name = "sinh",	.desc = "(D)D", .meth.mstatic = javalangmath_sinh },
+		{ .name = "exp",	.desc = "(D)D", .meth.mstatic = javalangmath_exp },
+		{ .name = "log",	.desc = "(D)D", .meth.mstatic = javalangmath_log },
+		{ .name = "log10",	.desc = "(D)D", .meth.mstatic = javalangmath_log10 },
+		{ .name = "log1p",	.desc = "(D)D", .meth.mstatic = javalangmath_log1p },
 		{.name=NULL}
 	}
 };
@@ -7419,7 +7541,7 @@ static void freeAttribute(attribute_info *ai)
 	free(ai);
 }
 #ifdef DEBUG
-const char *printObject(const Object *o)
+const char *printObject(Object *o)
 {
 	static char buf[BUFSIZ];
 	FILE *bfp = fmemopen(buf, sizeof(buf), "w");
@@ -7687,7 +7809,7 @@ static void freeThread(Thread *t)
 }
 
 #ifdef DEBUG
-static void printThreadState(enum th_state_en st, char *buf)
+static void printThreadState(th_state_en st, char *buf)
 {
 	const char *tmp = NULL;
 	switch(st)
@@ -8149,7 +8271,7 @@ int main(const int ac, const char *av[])
 
 	printf("boot: VM now enabled\n");
 
-		cls_Class->isLinked = true;
+	cls_Class->isLinked = true;
 	cls_String->isLinked = true;
 	cls_ClassLoader->isLinked = true;
 
@@ -8191,8 +8313,6 @@ int main(const int ac, const char *av[])
 	if (cf == NULL) exit(1);
 	cf = processNatives(parent, &java_lang_ClassLoader);
 	if (cf == NULL) exit(1);
-	cf = processNatives(parent, &java_lang_Math);
-	if (cf == NULL) exit(1);
 
 
 
@@ -8226,6 +8346,11 @@ int main(const int ac, const char *av[])
 	if ((parent->thread = newObject(parent, findClass2(parent, "java/lang/Thread", false))) == NULL)
 		errx(EXIT_FAILURE, "boot: unable to create Thread Object");
 	parent->thread->lock++;
+
+	cf = processNatives(parent, &java_lang_Math);
+	if (cf == NULL) exit(1);
+	cf = processNatives(parent, &java_lang_Double);
+	if (cf == NULL) exit(1);
 
 	cf = loadClass(parent, av[1]);
 	printf("boot: VM loaded\n");

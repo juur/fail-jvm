@@ -31,11 +31,14 @@ public final class Double extends Number implements Comparable<Double> {
     SIZE = 64;
   }
 
-  public static String toString(final long a) {
+  public static String toString(final double a) {
     return "<double>";
   }
 
   private final double value;
+
+  public static native double longBitsToDouble(long bits);
+  public static native double doubleToRawLongBits(double value);
 
   public Double(final float val) {
     value = val;
