@@ -225,7 +225,6 @@ public class Collections {
       return map.containsValue(value);
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public Set<Entry<K, V>> entrySet() {
       return null;

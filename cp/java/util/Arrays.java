@@ -6,6 +6,7 @@ import java.util.List;
 
 public class Arrays {
 
+  @SafeVarargs
   public static <T> List<T> asList(final T... a) {
     return new ArrayList<T>(a);
   }
@@ -316,7 +317,7 @@ public class Arrays {
 
 	  int rc = 31;
 	  for (final Object b : a)
-		  rc += (a == null) ? 0 : a.hashCode();
+		  rc += (b == null) ? 0 : b.hashCode();
 
 	  return rc;
   }
