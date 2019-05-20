@@ -9,7 +9,6 @@ CFLAGS		:=	-std=c99 \
 	-fsingle-precision-constant \
 	-Wabi -Wbad-function-cast \
 	-Wconversion \
-	-Wdouble-promotion \
 	-Wfloat-equal -Winit-self \
 	-Wjump-misses-init \
 	-Wlogical-op \

@@ -677,15 +677,15 @@ static struct predefinedAttribute predefinedAttrs[] = {
 };
 
 static prim_class_map_t primitiveClassMap[] = {
-	{TYPE_INT,		"java/lang/Integer",	NULL},
-	{TYPE_CHAR,		"java/lang/Character",	NULL},
-	{TYPE_BOOL,		"java/lang/Boolean",	NULL},
-	{TYPE_LONG,		"java/lang/Long",		NULL},
-	{TYPE_FLOAT,	"java/lang/Float",		NULL},
-	{TYPE_DOUBLE,	"java/lang/Double",		NULL},
-	{TYPE_SHORT,	"java/lang/Short",		NULL},
-	{TYPE_BYTE,		"java/lang/Byte",		NULL},
-	{TYPE_VOID,		"java/lang/Void",		NULL},
+	{TYPE_INT,		"java.lang.Integer",	NULL},
+	{TYPE_CHAR,		"java.lang.Character",	NULL},
+	{TYPE_BOOL,		"java.lang.Boolean",	NULL},
+	{TYPE_LONG,		"java.lang.Long",		NULL},
+	{TYPE_FLOAT,	"java.lang.Float",		NULL},
+	{TYPE_DOUBLE,	"java.lang.Double",		NULL},
+	{TYPE_SHORT,	"java.lang.Short",		NULL},
+	{TYPE_BYTE,		"java.lang.Byte",		NULL},
+	{TYPE_VOID,		"java.lang.Void",		NULL},
 
 	{0, NULL, NULL}
 };
@@ -786,7 +786,7 @@ static const char *printOpType(uint8_t type)
 }
 
 #ifdef DEBUG
-static char *printOpValue(Operand *op);
+static const char *printOpValue(Operand *op);
 static char *printArray(Object *o)
 {
 	static char buf[BUFSIZ];
@@ -804,7 +804,7 @@ static char *printArray(Object *o)
 	return buf;
 }
 
-static char *printOpValue(Operand *op)
+static const char *printOpValue(Operand *op)
 {
 	if (op == NULL)
 		return "<>";
@@ -1785,7 +1785,7 @@ loop:
 			{
 				desc->baseType = *ptr;
 				ptr += 1;
-				const uint8_t *tmp = ptr;
+				uint8_t *tmp = ptr;
 				while (*tmp && *tmp != ';') tmp++;
 				if (!*tmp) {
 					warnx("broken %s", str);
@@ -1793,6 +1793,8 @@ loop:
 				}
 				tmp++; // skip ;
 				desc->className = strndup((char *)ptr, (size_t)(tmp-ptr-1U));
+				for(ptr = (uint8_t *)desc->className; *ptr && *ptr != ';'; ptr++)
+					if(*ptr == '/') *ptr = '.';
 				return (char *)tmp;
 			}
 			break;
@@ -1863,7 +1865,7 @@ static field_info *readField(Thread *thread, FILE *f, cp_info **cp, uint32_t cp_
 	}
 
 	if ((attrs = calloc(ret->attributes_count+1U, sizeof(attribute_info *))) == NULL) {
-		warn("parseParamDescriptor");
+		warn("readField");
 		goto fail;
 	}
 
@@ -2105,6 +2107,36 @@ static bool fixupCpUtf8(cp_info *ci)
 	return true;
 }
 
+static bool fixUtf8ClassName(cp_info *ci)
+{
+	if (ci->d.utf8.ascii) {
+		if (strchr(ci->d.utf8.ascii, '/') == NULL)
+			return true;
+		free(ci->d.utf8.ascii);
+		ci->d.utf8.ascii = NULL;
+	}
+
+	if (ci->d.utf8.utf16) {
+		free(ci->d.utf8.utf16);
+		ci->d.utf8.utf16 = NULL;
+	}
+
+	for (uint16_t i = 0; i < ci->d.utf8.length; i++)
+	{
+		uint8_t val = ci->d.utf8.bytes[i];
+
+		if ((val & 0xe0) == 0xc0) {
+			i++;
+		} else if ((val & 0xf0) == 0xe0) {
+			i++; i++;
+		} else if (val == '/') {
+			ci->d.utf8.bytes[i] = '.';
+		}
+	}
+
+	return fixupCpUtf8(ci);
+}
+
 static bool fixupCpString(Thread *thread, cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
 	if (ci->d.str.string && ci->d.str.intern) 
@@ -2206,6 +2238,22 @@ static bool fixupConstant(Thread *thread, cp_info *ci, cp_info **pool, uint16_t 
 	return true;
 }
 
+static bool fixupPostConstant(Thread *thread, cp_info *ci, cp_info **pool, uint16_t cp_len)
+{
+	bool ret = true;
+
+	switch(ci->tag)
+	{
+		case CONSTANT_Class:
+			return fixUtf8ClassName(ci->d.class.name);
+		case CONSTANT_NameAndType:
+			return fixUtf8ClassName(ci->d.nt.descriptor);
+		default:
+			break;
+	}
+	return ret;
+}
+
 static Operand *loadInnerClass(Thread *thread, InnerClasses_attribute *ic, ClassFile *cf)
 {
 	if(thread == NULL || ic == NULL || cf == NULL)
@@ -2227,7 +2275,7 @@ static Operand *loadInnerClass(Thread *thread, InnerClasses_attribute *ic, Class
 
 		if ((def->inner_class = loadClass(thread, buf)) == NULL) {
 			warnx("loadInnerClass: unable to load %s", buf);
-			return throw(thread, "java/lang/ClassNotFoundException", NULL, 0);
+			return throw(thread, "java.lang.ClassNotFoundException", NULL, 0);
 		}
 		if (thread->jvm->VM) linkClass(thread, (ClassFile *)def->inner_class);
 		//addClass(thread, def->inner_class);
@@ -2262,16 +2310,16 @@ static Operand *newStringFromChar(Thread *thread, Object *buf, Object **result)
 	/* validate inputs */
 	if (buf == NULL) {
 		warnx("newStringFromChar: buf == NULL");
-		return throw(thread, "java/lang/NullPointerException", ERR_AT, 0);
+		return throw(thread, "java.lang.NullPointerException", ERR_AT, 0);
 	}
 	
 	if (buf->type != OBJ_ARRAY || buf->data.array.type != TYPE_CHAR) {
 		warnx("newStringFromChar: buf not [C");
-		return throw(thread, "java/lang/IllegalArguementException", ERR_AT, 0);
+		return throw(thread, "java.lang.IllegalArguementException", ERR_AT, 0);
 	}
 
 	/* create the String */
-	ClassFile *str_cls = findClass(thread, "java/lang/String");
+	ClassFile *str_cls = findClass(thread, "java.lang.String");
 	Object *str_obj = newObject(thread, str_cls);
 	Operand *str_op = newOperand(TYPE_OREF, str_obj);
 	push(cur_frame, str_op);
@@ -2303,7 +2351,7 @@ static Operand *newString(Thread *thread, const char *text, Object **result)
 	Object *array = newArray(thread, TYPE_CHAR, (uint32_t)strlen(text), NULL);
 
 	if (array == NULL)
-		return throw(thread, "java/lang/RuntimeException", ERR_AT, 0);
+		return throw(thread, "java.lang.RuntimeException", ERR_AT, 0);
 
 	for (uint32_t i = 0; text[i]; i++)
 	{
@@ -2360,7 +2408,7 @@ static Object *createClassForArray(Thread *thread, const uint8_t type, const uin
 	printf("Creating class for %s\n", buf);
 #endif
 
-	ClassFile *class_cf = findClass2(thread, "java/lang/Class", false);
+	ClassFile *class_cf = findClass2(thread, "java.lang.Class", false);
 	if (!class_cf) return NULL;
 
 	Frame *cur_frame = currentFrame(thread);
@@ -2455,7 +2503,7 @@ static Object *createClass(Thread *thread, ClassFile *cf)
 {
 	assert(thread->jvm->VM == true);
 
-	ClassFile *class_cf = findClass2(thread, "java/lang/Class", false);
+	ClassFile *class_cf = findClass2(thread, "java.lang.Class", false);
 	if (!class_cf) return NULL;
 
 	Frame *cur_frame = currentFrame(thread);
@@ -2571,16 +2619,22 @@ static ClassFile *parseClass(Thread *thread, FILE *fp)
 		err(EXIT_FAILURE, "parseClass");
 
 	for(int i = 0; i < ret->methods_count; i++)
+	{
 		if ((ret->methods[i] = readMethod(thread, fp, ret->constant_pool, 
-						ret->constant_pool_count, ret)) == NULL) {
+						ret->constant_pool_count, ret)) == NULL)
 			errx(EXIT_FAILURE, "readMethod[%d]", i);
-		} else {
-			for(int j = 0; j < ret->methods[i]->attributes_count; j++)
-			{
-				if (!strcmp(ret->methods[i]->attributes[j]->name->d.utf8.ascii, "Code"))
-					((Code_attribute *)ret->methods[i]->attributes[j]->d.code)->method = ret->methods[i];
-			}
+
+		/* fix class naming style */
+		if (strchr(ret->methods[i]->descriptor->d.utf8.ascii, '/') != NULL)
+			fixUtf8ClassName(ret->methods[i]->descriptor);
+
+		/* link Code segment */
+		for(int j = 0; j < ret->methods[i]->attributes_count; j++)
+		{
+			if (!strcmp(ret->methods[i]->attributes[j]->name->d.utf8.ascii, "Code"))
+				((Code_attribute *)ret->methods[i]->attributes[j]->d.code)->method = ret->methods[i];
 		}
+	}
 
 	if (!read2(fp, &ret->attributes_count)) err(EXIT_FAILURE, "parseClass");
 	if ((ret->attributes = calloc(ret->attributes_count+1U, 
@@ -2593,12 +2647,21 @@ static ClassFile *parseClass(Thread *thread, FILE *fp)
 						ret->constant_pool_count)) == NULL)
 			errx(EXIT_FAILURE, "readAttribute[%d]", i);
 
+	for(int i = 1; i < ret->constant_pool_count; i++) {
+		if (!fixupPostConstant(thread, (cp_info *)ret->constant_pool[i], ret->constant_pool, 
+					ret->constant_pool_count))
+			errx(EXIT_FAILURE, "fixupPostConstantPool[%d]", i);
+
+		if (ret->constant_pool[i]->tag == CONSTANT_Long ||
+				ret->constant_pool[i]->tag == CONSTANT_Double) i++;
+	}
+
 	if (ret->super_class)
 		ret->super_name = strdup(ret->super_class->d.class.name->d.utf8.ascii);
 
 	if ((ret->interface_class = calloc(ret->interfaces_count, 
 					sizeof(cp_info *))) == NULL)
-			errx(EXIT_FAILURE, "parseClass");
+		errx(EXIT_FAILURE, "parseClass");
 
 	for(uint32_t i = 0; i < ret->interfaces_count; i++)
 		ret->interface_class[i] = ret->constant_pool[ret->interfaces[i]];
@@ -2665,11 +2728,11 @@ static Operand *throw(Thread *thread, const char *name, const char *text,
 	ClassFile *thrcls = findClass(thread, name);
 
 	if (thrcls == NULL) {
-		if(!strcmp(name, "java/lang/RuntimeException")) 
+		if(!strcmp(name, "java.lang.RuntimeException")) 
 			errx(EXIT_FAILURE, 
-					"Cannot find java/lang/RuntimeException in throw");
+					"Cannot find java.lang.RuntimeException in throw");
 		else 
-			return throw(thread, "java/lang/RuntimeException", name, pc);
+			return throw(thread, "java.lang.RuntimeException", name, pc);
 	}
 
 	Object *thr = newObject(thread, thrcls);
@@ -2688,14 +2751,14 @@ static Operand *throw(Thread *thread, const char *name, const char *text,
 	}
 
 	method_info *mi = findMethodByClass(thread, thrcls, 
-			"<init>", text ? "(Ljava/lang/String;)V" : "()V");
+			"<init>", text ? "(Ljava.lang.String;)V" : "()V");
 	if ((ex_opr = invokeMethod(thread, mi, true, pc)) != NULL)
 		return ex_opr;
 
 	if(!push(cur_frame, newOperand(TYPE_OREF, thr)))
 		errx(EXIT_FAILURE, "throw: unable to init");
 	mi = findMethodByClass(thread, thrcls,
-			"fillInStackTrace", "()Ljava/lang/Throwable;");
+			"fillInStackTrace", "()Ljava.lang.Throwable;");
 	if ((ex_opr = invokeMethod(thread, mi, true, pc)) != NULL)
 		return ex_opr;
 
@@ -2773,7 +2836,7 @@ static ClassFile *findClass2(Thread * thread, const char *clsname, const bool lo
 static bool canCast(Thread *thread, const char *from, const char *to)
 {
 	if (!strcmp(from, to)) return true;
-	if (!strcmp("java/lang/Object", to)) return true;
+	if (!strcmp("java.lang.Object", to)) return true;
 
 
 	ClassFile *fromCls = findClass(thread, from);
@@ -2817,10 +2880,11 @@ static ClassFile *findClass(Thread *thread, const char *clsname)
 static method_info *findMethodByClass(Thread *thread, ClassFile *cls, const char *mthname, const char *desc)
 {
 	if (cls == NULL)
-		cls = findClass(thread, "java/lang/Object");
+		cls = findClass(thread, "java.lang.Object");
 
 	for (ssize_t i = 0; i < cls->methods_count; i++)
 	{
+		//printf("check %s == %s\n", desc, cls->methods[i]->descriptor->d.utf8.ascii);
 		if (!strcmp(cls->methods[i]->name->d.utf8.ascii, mthname) &&
 				!strcmp(desc, cls->methods[i]->descriptor->d.utf8.ascii)) {
 			return cls->methods[i];
@@ -3019,18 +3083,18 @@ static Operand *ldc(const int idx, Frame *cur_frame, const ClassFile *cls, Threa
 				ClassFile *strcls;
 				Object *o = newObject(thread,
 						strcls = findClass(thread, 
-							"java/lang/String"));
+							"java.lang.String"));
 
 				if(!push(cur_frame, newOperand(TYPE_OREF, o)))
-					return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				if(!push(cur_frame, newOperand(TYPE_AREF, cp->d.str.intern)))
-					return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 				method_info *meth; 
 				meth = findMethodByClass(thread, strcls, "<init>", "([C)V");
 
 				if (meth == NULL)
-					return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 				if((ex_opr = invokeMethod(thread, meth, true, pc)) != NULL)
 					return ex_opr;
@@ -3045,7 +3109,7 @@ static Operand *ldc(const int idx, Frame *cur_frame, const ClassFile *cls, Threa
 #endif
 				ClassFile *cls = findClass(thread, cp->d.class.name->d.utf8.ascii);
 				if (!cls || !getClassObject(thread, (ClassFile *)cls)) 
-					return throw(thread, "java/lang/ClassNotFoundException", ERR_AT, pc);
+					return throw(thread, "java.lang.ClassNotFoundException", ERR_AT, pc);
 
 				push(cur_frame, newOperand(TYPE_OREF, getClassObject(thread, (ClassFile *)cls)));
 			}
@@ -3055,15 +3119,15 @@ static Operand *ldc(const int idx, Frame *cur_frame, const ClassFile *cls, Threa
 			printf("%f", cp->d.tfloat.c_float);
 #endif
 			if(!push(cur_frame, newOperand(TYPE_FLOAT, &cp->d.tfloat.c_float)))
-				return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+				return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 			break;
 		case CONSTANT_Integer:
 			if(!push(cur_frame, newOperand(TYPE_INT, &cp->d.tint.c_int)))
-				return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+				return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 			break;
 		case CONSTANT_Long:
 			if(!push(cur_frame, newOperand(TYPE_LONG, &cp->d.tlong.c_long)))
-				return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+				return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 			break;
 		default:
 			errx(EXIT_FAILURE, "ldc: unknown constant pool tag: %d", cp->tag);
@@ -3108,11 +3172,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 	{
 		if (pc < 0 || pc >= attr->code_length) {
 			warnx("runCode: %ld: invalid program counter", pc);
-			return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+			return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 		}
 
 		Frame *cur_frame = currentFrame(thread);
-		if (cur_frame == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+		if (cur_frame == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 		
 		const uint8_t opc = code[pc];
 		if (pcstore) *pcstore = pc;
@@ -3317,11 +3381,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					{
 						case CONSTANT_Long:
 							if(!push(cur_frame, newOperand(TYPE_LONG, &cp->d.tlong.c_long)))
-								return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+								return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 							break;
 						case CONSTANT_Double:
 							if(!push(cur_frame, newOperand(TYPE_DOUBLE, &cp->d.tdouble.c_double)))
-								return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+								return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 							break;
 						default:
 							errx(EXIT_FAILURE, "ldc2_w: unknown constant pool tag: %d", cp->tag);
@@ -3335,7 +3399,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR " iload " ANSI_RESET "%d\n", tmp);
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame, tmp))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x16: /* lload */
@@ -3345,7 +3409,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     printf(ANSI_INSTR " lload " ANSI_RESET "%d\n", tmp);
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame, tmp))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x17: /* fload */
@@ -3355,7 +3419,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     printf(ANSI_INSTR " fload " ANSI_RESET "%d\n", tmp);
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame, tmp))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x18: /* dload */
@@ -3365,7 +3429,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     printf(ANSI_INSTR " dload " ANSI_RESET "%d\n", tmp);
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame, tmp))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x19: /* aload */
@@ -3375,7 +3439,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     printf(ANSI_INSTR " aload " ANSI_RESET "%d\n", tmp);
 #endif
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame, tmp))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x1a: /* iload_0 */
@@ -3384,7 +3448,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR " iload_0\n" ANSI_RESET);
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,0))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x1b: /* iload_1 */
@@ -3393,7 +3457,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR" iload_1\n" ANSI_RESET);
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,1))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x1c: /* iload_2 */
@@ -3402,7 +3466,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR" iload_2\n" ANSI_RESET);
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,2))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x1d: /* iload_3 */
@@ -3413,7 +3477,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[3]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,3))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x1e: /* lload_0 */
@@ -3424,7 +3488,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[0]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,0))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x1f: /* lload_1 */
@@ -3435,7 +3499,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[1]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,1))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x20: /* lload_2 */
@@ -3446,7 +3510,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[2]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,2))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x21: /* lload_3 */
@@ -3457,7 +3521,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[3]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,3))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x22: /* fload_0 */
@@ -3468,7 +3532,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[0]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,0))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x23: /* fload_1 */
@@ -3479,7 +3543,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[1]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,1))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x24: /* fload_2 */
@@ -3490,7 +3554,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[2]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,2))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x25: /* fload_3 */
@@ -3501,7 +3565,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[3]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,3))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x26: /* dload_0 */
@@ -3512,7 +3576,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[0]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,0))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x27: /* dload_1 */
@@ -3524,9 +3588,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 #endif
 					Operand *o = getLocal(cur_frame,1);
 					if(o == NULL || o->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 					if(!push(cur_frame, dupOperand(o)))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x28: /* dload_2 */
@@ -3537,7 +3601,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[2]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,2))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x29: /* dload_3 */
@@ -3548,7 +3612,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[3]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,3))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x2a: /* aload_0 */
@@ -3559,7 +3623,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[0]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,0))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x2b: /* aload_1 */
@@ -3570,7 +3634,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[1]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,1))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x2c: /* aload_2 */
@@ -3581,7 +3645,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpValue(cur_frame->local[2]));
 #endif
 					if(!push(cur_frame, dupOperand(getLocal(cur_frame,2))))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x2d: /* aload_3 */
@@ -3603,10 +3667,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
 
 					if (array->val.vref->data.array.data[index->val.vint])
 						push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
@@ -3628,10 +3692,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
 
 					if (array->val.vref->data.array.data[index->val.vint])
 						push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
@@ -3653,10 +3717,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
 
 					if (array->val.vref->data.array.data[index->val.vint])
 						push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
@@ -3678,10 +3742,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
 
 					if (array->val.vref->data.array.data[index->val.vint])
 						push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
@@ -3703,10 +3767,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
 
 					if (array->val.vref->data.array.data[index->val.vint])
 						push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
@@ -3723,12 +3787,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " baload\n" ANSI_RESET);
 #endif
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
 
 					if (array->val.vref->data.array.data[index->val.vint]) {
 						if (array->val.vref->data.array.type == TYPE_BOOL)
@@ -3752,13 +3816,13 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " caload" ANSI_RESET " [%d] %s\n", index->val.vint,
 							printOpType(array->val.vref->data.array.type));
 #endif
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", NULL, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
 
 					if (array->val.vref->data.array.data[index->val.vint]) {
 						tmpOp.val.vint = array->val.vref->data.array.data[index->val.vint]->val.vchar;
@@ -3778,13 +3842,13 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " saload" ANSI_RESET " [%d] %s\n", index->val.vint,
 							printOpType(array->val.vref->data.array.type));
 #endif
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", ERR_AT, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
 					if (array->val.vref->data.array.data[index->val.vint]) {
 						tmpOp.val.vint = array->val.vref->data.array.data[index->val.vint]->val.vshort;
@@ -3809,7 +3873,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							tmp);
 #endif
 					if(setLocal(cur_frame, tmp, val) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x37: /* lstore */
@@ -3823,7 +3887,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							tmp);
 #endif
 					if(setLocal(cur_frame, tmp, val) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x38: /* fstore */
@@ -3837,7 +3901,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							tmp);
 #endif
 					if(setLocal(cur_frame, tmp, val) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x39: /* dstore */
@@ -3851,7 +3915,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							tmp);
 #endif
 					if(setLocal(cur_frame, tmp, val) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x3a: /* astore */
@@ -3865,7 +3929,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							tmp);
 #endif
 					if(setLocal(cur_frame, tmp, val) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x3b: /* istore_0 */
@@ -3876,7 +3940,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
 #endif
 					if(setLocal(cur_frame,0,a) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x3c: /* istore_1*/
@@ -3887,7 +3951,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
 #endif
 					if(setLocal(cur_frame,1,a) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x3d: /* istore_2*/
@@ -3898,7 +3962,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
 #endif
 					if(setLocal(cur_frame,2,a) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x3e: /* istore_3*/
@@ -3909,7 +3973,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
 #endif
 					if(setLocal(cur_frame,3,a) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x47: /* dstore_0 */
@@ -3918,7 +3982,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR "dstore_0\n" ANSI_RESET);
 #endif
 					if(setLocal(cur_frame,0,pop(cur_frame)) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 
@@ -3928,7 +3992,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR "dstore_1\n" ANSI_RESET);
 #endif
 					if(setLocal(cur_frame,1,pop(cur_frame)) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 
@@ -3938,7 +4002,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR "dstore_2\n" ANSI_RESET);
 #endif
 					if(setLocal(cur_frame,2,pop(cur_frame)) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 
@@ -3948,7 +4012,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR "dstore_3\n" ANSI_RESET);
 #endif
 					if(setLocal(cur_frame,3,pop(cur_frame)) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x4b: /* astore_0 */
@@ -3957,7 +4021,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR" astore_0\n" ANSI_RESET);
 #endif
 					if(setLocal(cur_frame,0,pop(cur_frame)) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x4c: /* astore_1 */
@@ -3966,7 +4030,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR" astore_1\n" ANSI_RESET);
 #endif
 					if(setLocal(cur_frame,1,pop(cur_frame)) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x4d: /* astore_2 */
@@ -3975,7 +4039,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR" astore_2\n" ANSI_RESET);
 #endif
 					if(setLocal(cur_frame,2,pop(cur_frame)) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x4e: /* astore_3 */
@@ -3984,7 +4048,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR" astore_3\n" ANSI_RESET);
 #endif
 					if(setLocal(cur_frame,3,pop(cur_frame)) == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0x4f: /* iastore */
@@ -3997,10 +4061,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", ERR_AT, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
 					Operand *cur = array->val.vref->data.array.data[index->val.vint];
 					if (cur) 
@@ -4019,7 +4083,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " aastore " ANSI_RESET "[%d]\n", 
 							index->val.vint);
@@ -4028,11 +4092,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 						warnx("aastore: %d != %d", value->type, array->val.vref->data.array.type);
 						warnx("aastore: invalid type");
 						__asm__("int $3");
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					}
 
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", ERR_AT, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
 					if (array->val.vref->data.array.data[index->val.vint])
 						freeOperand(array->val.vref->data.array.data[index->val.vint]);
@@ -4050,7 +4114,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " bastore " ANSI_RESET "%s %s => [%d][%s]\n", 
 							printOpType(value->type),
@@ -4059,11 +4123,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpType(array->val.vref->data.array.type));
 #endif
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", ERR_AT, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
 					if (value->type != TYPE_INT || (array->val.vref->data.array.type != TYPE_BYTE 
 								&& array->val.vref->data.array.type != TYPE_BOOL) )
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					tmpOp.val.vbyte = (int8_t)value->val.vint;
 
@@ -4083,7 +4147,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *array = pop(cur_frame);
 
 					if (index->type == TYPE_NULL || array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " castore " ANSI_RESET "%s %s => [%d][%s]\n", 
 							printOpType(value->type),
@@ -4092,10 +4156,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							printOpType(array->val.vref->data.array.type));
 #endif
 					if (value->type != TYPE_INT || array->val.vref->data.array.type != TYPE_CHAR)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
-						return throw(thread, "java/lang/IndexOutOfBoundsException", ERR_AT, pc);
+						return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
 					tmpOp.val.vchar = (uint16_t)value->val.vint;
 
@@ -4200,7 +4264,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     tmpOp.val.vfloat = one->val.vfloat + two->val.vfloat;
                     Operand *res = newOperand(TYPE_FLOAT, &tmpOp.val.vfloat);
 #ifdef DEBUG
-                    printf(ANSI_INSTR " fadd " ANSI_RESET "%ld+%ld=%ld\n",
+                    printf(ANSI_INSTR " fadd " ANSI_RESET "%f+%f=%f\n",
                             one->val.vfloat,
                             two->val.vfloat,
                             res->val.vfloat);
@@ -4218,7 +4282,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     tmpOp.val.vdouble = one->val.vdouble + two->val.vdouble;
                     Operand *res = newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble);
 #ifdef DEBUG
-                    printf(ANSI_INSTR " dadd " ANSI_RESET "%ld+%ld=%ld\n",
+                    printf(ANSI_INSTR " dadd " ANSI_RESET "%f+%f=%f\n",
                             one->val.vdouble,
                             two->val.vdouble,
                             res->val.vdouble);
@@ -4272,7 +4336,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     tmpOp.val.vfloat = two->val.vfloat - one->val.vfloat;
                     Operand *res = newOperand(TYPE_FLOAT, &tmpOp.val.vfloat);
 #ifdef DEBUG
-                    printf(ANSI_INSTR " fsub " ANSI_RESET "%ld-%ld=%ld\n",
+                    printf(ANSI_INSTR " fsub " ANSI_RESET "%f-%f=%f\n",
                             two->val.vfloat,
                             one->val.vfloat,
                             res->val.vfloat);
@@ -4290,7 +4354,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     tmpOp.val.vdouble = two->val.vdouble - one->val.vdouble;
                     Operand *res = newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble);
 #ifdef DEBUG
-                    printf(ANSI_INSTR " dsub " ANSI_RESET "%ld-%ld=%ld\n",
+                    printf(ANSI_INSTR " dsub " ANSI_RESET "%f-%f=%f\n",
                             two->val.vdouble,
                             one->val.vdouble,
                             res->val.vdouble);
@@ -4326,7 +4390,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     tmpOp.val.vlong = one->val.vlong * two->val.vlong;
                     Operand *res = newOperand(TYPE_LONG, &tmpOp.val.vlong);
 #ifdef DEBUG
-                    printf(ANSI_INSTR " lmul " ANSI_RESET "%d*%d=%d\n",
+                    printf(ANSI_INSTR " lmul " ANSI_RESET "%ld*%ld=%ld\n",
                             one->val.vlong,
                             two->val.vlong,
                             res->val.vlong);
@@ -4358,7 +4422,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     tmpOp.val.vdouble = one->val.vdouble * two->val.vdouble;
                     Operand *res = newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble);
 #ifdef DEBUG
-                    printf(ANSI_INSTR " dmul " ANSI_RESET "%d*%d=%d\n",
+                    printf(ANSI_INSTR " dmul " ANSI_RESET "%f*%f=%f\n",
                             one->val.vdouble,
                             two->val.vdouble,
                             res->val.vdouble);
@@ -4404,7 +4468,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *one = pop(cur_frame);
                     tmpOp.val.vfloat = one->val.vfloat / two->val.vfloat;
 #ifdef DEBUG
-                    printf(ANSI_INSTR " fdiv" ANSI_RESET " %ld/%ld=%ld\n",
+                    printf(ANSI_INSTR " fdiv" ANSI_RESET " %f/%f=%f\n",
                             one->val.vfloat, two->val.vfloat,
                             tmpOp.val.vfloat);
 #endif
@@ -4419,7 +4483,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *one = pop(cur_frame);
                     tmpOp.val.vdouble = one->val.vdouble / two->val.vdouble;
 #ifdef DEBUG
-                    printf(ANSI_INSTR " ddiv" ANSI_RESET " %ld/%ld=%ld\n",
+                    printf(ANSI_INSTR " ddiv" ANSI_RESET " %f/%f=%f\n",
                             one->val.vdouble, two->val.vdouble,
                             tmpOp.val.vdouble);
 #endif
@@ -4440,7 +4504,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					int32_t value2 = two->val.vint;
 
 					if (value2 == 0) {
-						return throw(thread, "java/lang/ArithmeticException", NULL, pc);
+						return throw(thread, "java.lang.ArithmeticException", NULL, pc);
 					}
 
 					tmpOp.val.vint = value1 - (value1 / value2) * value2;
@@ -4462,7 +4526,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					int64_t value2 = two->val.vlong;
 
 					if (value2 == 0) {
-						return throw(thread, "java/lang/ArithmeticException", NULL, pc);
+						return throw(thread, "java.lang.ArithmeticException", NULL, pc);
 					}
 
 					tmpOp.val.vlong = value1 - (value1 / value2) * value2;
@@ -4725,7 +4789,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *o = pop(cur_frame);
 
 					if (o->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " ifeq" ANSI_RESET " %s == 0 ? goto %lu\n", 
 							printOpValue(o),
@@ -4755,7 +4819,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *o = pop(cur_frame);
 
 					if (o->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " iflt" ANSI_RESET " %s < 0 ? goto %lu\n", 
 							printOpValue(o),
@@ -4783,7 +4847,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *o = pop(cur_frame);
 
 					if (o->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " ifge" ANSI_RESET " %s >= 0 ? goto %lu\n", 
 							printOpValue(o),
@@ -4812,7 +4876,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *o = pop(cur_frame);
 
 					if (o->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " ifgt" ANSI_RESET " %s > 0 ? goto %lu\n", 
 							printOpValue(o),
@@ -4840,7 +4904,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *o = pop(cur_frame);
 
 					if (o->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " ifle" ANSI_RESET " %s <= 0 ? goto %lu\n", 
 							printOpValue(o),
@@ -4896,7 +4960,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *one = pop(cur_frame);
 
 					if (two->type == TYPE_NULL || one->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					if (one->val.vint == two->val.vint)
 						pc += bra;
@@ -4918,7 +4982,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *one = pop(cur_frame);
 
 					if (two->type == TYPE_NULL || one->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					if (one->val.vint != two->val.vint)
 						pc += bra;
@@ -4939,7 +5003,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *one = pop(cur_frame);
 
 					if (two->type == TYPE_NULL || one->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " if_icmplt" ANSI_RESET " %d < %d ? goto %ld\n", 
 							one->val.vint, two->val.vint,
@@ -4959,7 +5023,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *one = pop(cur_frame);
 
 					if (two->type == TYPE_NULL || one->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " if_icmpge" ANSI_RESET " %d >= %d ? goto %ld\n",
 							one->val.vint, two->val.vint,
@@ -4979,7 +5043,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *one = pop(cur_frame);
 
 					if (two->type == TYPE_NULL || one->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " if_icmpgt" ANSI_RESET " %d > %d ? goto %ld\n",
 							one->val.vint, two->val.vint,
@@ -5000,7 +5064,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *one = pop(cur_frame);
 
 					if (two->type == TYPE_NULL || one->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " if_icmple" ANSI_RESET " %d <= %d ? goto %lu\n", 
 							one->val.vint, two->val.vint, 
@@ -5021,7 +5085,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *two = pop(cur_frame);
 
 					if (two->type == TYPE_NULL || one->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " if_acmpeq" ANSI_RESET " ref == ref ? goto %lu\n", 
 							pc + bra);
@@ -5072,7 +5136,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR " ireturn\n" ANSI_RESET);
 #endif
 					Operand *o = pop(cur_frame);
-					if (o == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (o == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					cur_frame->ret = o;
 					running = false;
 				}
@@ -5083,7 +5147,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR " lreturn\n" ANSI_RESET);
 #endif
 					Operand *o = pop(cur_frame);
-					if (o == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (o == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					cur_frame->ret = o;
 					running = false;
 				}
@@ -5094,7 +5158,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR "freturn\n" ANSI_RESET);
 #endif
 					Operand *o = pop(cur_frame);
-					if (o == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (o == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					cur_frame->ret = o;
 					running = false;
 				}
@@ -5105,7 +5169,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR "dreturn\n" ANSI_RESET);
 #endif
 					Operand *o = pop(cur_frame);
-					if (o == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (o == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					cur_frame->ret = o;
 					running = false;
 				}
@@ -5113,7 +5177,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 			case 0xb0: /* areturn */
 				{
 					Operand *o = pop(cur_frame);
-					if (o == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (o == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " areturn " ANSI_RESET);
 					printf("%s %s\n", printOpType(o->type), printOpValue(o));
@@ -5153,10 +5217,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 								printOpValue(f->static_operand));
 #endif
 						if(!push(cur_frame, dupOperand(f->static_operand)))
-							return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+							return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					} else {
 						if(!push(cur_frame, newOperand(TYPE_NULL, NULL)))
-							return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+							return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					}
 				}
 				break;
@@ -5179,7 +5243,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							f->descriptor->d.utf8.ascii);
 #endif
 					Operand *value = pop(cur_frame);
-					if (value == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (value == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					if (f->static_operand)
 						freeOperand(f->static_operand);
@@ -5207,7 +5271,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 #endif
 					Operand *o = pop(cur_frame);
 					if (o->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					Object *obj = o->val.vref;
 
@@ -5224,7 +5288,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 						dupOperand(fld->op);
 
 					if(!push(cur_frame, retop))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					freeOperand((Operand *)o);
 				}
@@ -5245,7 +5309,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 						break;
 					}
 					Operand *value = pop(cur_frame);
-					if (value == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (value == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 #ifdef DEBUG
 					printf(" from: %s %s", printOpType(value->type), printOpValue(value));
 					printf(" to  : %s %s\n",
@@ -5254,7 +5318,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 #endif
 					Operand *o = pop(cur_frame);
 					if (o->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 					Object *obj = o->val.vref;
 
 					Field *fld = NULL;
@@ -5299,20 +5363,20 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);
 
 					if (meth == NULL)
-						return throw(thread, "java/lang/ClassNotFoundException",
+						return throw(thread, "java.lang.ClassNotFoundException",
 								mi->class->d.class.name->d.utf8.ascii, pc);
 
 					if (cur_frame->sp <= meth->desc.num_params)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					Operand *op_obj = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
 
 					if (op_obj->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", 
+						return throw(thread, "java.lang.NullPointerException", 
 								"invokevirtual: object is null: " ERR_AT, pc);
 
 					Object *this = op_obj->val.vref;
-					if (!this) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (!this) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					meth = findMethodByClass(thread,
 							this->class, 
@@ -5325,7 +5389,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 								mi->nametype->d.nt.name->d.utf8.ascii,
 								mi->nametype->d.nt.descriptor->d.utf8.ascii);
 
-						return throw(thread, "java/lang/AbstractMethodError", 
+						return throw(thread, "java.lang.AbstractMethodError", 
 								NULL, pc);
 					}
 
@@ -5369,16 +5433,16 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);
 
 					if (cur_frame->sp <= meth->desc.num_params)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					Operand *op_obj = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
 
 					if (op_obj->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException",
+						return throw(thread, "java.lang.NullPointerException",
 								"invokespecial: object is null", pc);
 
 					Object *this = op_obj->val.vref;
-					if (!this) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (!this) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					if (!this->class) {
 						Operand *ret = classInit(thread, (ClassFile *)this->class);
@@ -5386,7 +5450,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					}
 
 					if (meth == NULL)
-						return throw(thread, "java/lang/AbstractMethodError", NULL, pc);
+						return throw(thread, "java.lang.AbstractMethodError", NULL, pc);
 #ifdef DEBUG
 					printf("           [%s.%s%s] => %s.%s%s on %s\n",
 							mi->class->d.class.name->d.utf8.ascii,
@@ -5424,7 +5488,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);
 
 					if (meth == NULL)
-						return throw(thread, "java/lang/AbstractMethodError", ERR_AT, pc);
+						return throw(thread, "java.lang.AbstractMethodError", ERR_AT, pc);
 
 					if(!class->isInit) {
 						Operand *ret = classInit(thread, (ClassFile *)class);
@@ -5460,18 +5524,18 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 								mi->class->d.class.name->d.utf8.ascii,
 								mi->nametype->d.nt.name->d.utf8.ascii,
 								mi->nametype->d.nt.descriptor->d.utf8.ascii);
-						return throw(thread, "java/lang/AbstractMethodError", ERR_AT, pc);
+						return throw(thread, "java.lang.AbstractMethodError", ERR_AT, pc);
 					}
 
 					if (cur_frame->sp <= meth->desc.num_params)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					Operand *op_obj = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
 					if (op_obj->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					Object *this = op_obj->val.vref;
-					if (!this) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (!this) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					/* actual method instance in implementing class */
 					meth = findMethodByClass(thread,
@@ -5479,7 +5543,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 							mi->nametype->d.nt.name->d.utf8.ascii,
 							mi->nametype->d.nt.descriptor->d.utf8.ascii);
 					if (meth == NULL)
-						return throw(thread, "java/lang/AbstractMethodError", 
+						return throw(thread, "java.lang.AbstractMethodError", 
 								ERR_AT, pc);
 
 					if (!this->class) {
@@ -5501,15 +5565,15 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 #endif
 					ClassFile *tmpcls = findClass(thread, ci->name->d.utf8.ascii);
 					if (tmpcls == NULL) 
-						return throw(thread, "java/lang/ClassNotFoundException", ERR_AT, pc);
+						return throw(thread, "java.lang.ClassNotFoundException", ERR_AT, pc);
 					Object *newObj = newObject(thread, tmpcls);
 					Operand *newOp = newOperand(TYPE_OREF, newObj);
 
 					if (newObj == NULL || newOp == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					if (!push(cur_frame, newOp))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 				}
 				break;
 			case 0xbc: /* newarray */
@@ -5519,15 +5583,15 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR " newarray " ANSI_RESET "#%d \n", tmp);
 #endif
 					Operand *cnt = pop(cur_frame);
-					if (cnt == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (cnt == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					if (cnt->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					Object *arr = newArray(thread, atypemap[tmp], (uint32_t)cnt->val.vint, NULL);
 					if (arr == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					if (!push(cur_frame, newOperand(TYPE_AREF, arr)))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					freeOperand(cnt);
 				}
 				break;
@@ -5538,21 +5602,21 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR " anewarray " ANSI_RESET "#%d \n", tmpw);
 #endif
 					Operand *cnt = pop(cur_frame);
-					if (cnt == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (cnt == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					if (cnt->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					// FIXME store class from cp[tmpw]
 					ClassFile *class = findClass(thread, cls->constant_pool[tmpw]->d.class.name->d.utf8.ascii);
 					if (class == NULL)
-						return throw(thread, "java/lang/ClassNotFoundException", ERR_AT, pc);
+						return throw(thread, "java.lang.ClassNotFoundException", ERR_AT, pc);
 
 					Object *arr = newArray(thread, TYPE_OREF, (uint32_t)cnt->val.vint, class);
 					if (arr == NULL)
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
 					if (!push(cur_frame, newOperand(TYPE_AREF, arr)))
-						return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+						return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					freeOperand(cnt);
 				}
 				break;
@@ -5562,9 +5626,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR " arraylength " ANSI_RESET);
 #endif
 					Operand *op_array = pop(cur_frame);
-					if (op_array == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (op_array == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					if (op_array->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					Object *array = op_array->val.vref;
 #ifdef DEBUG
@@ -5585,16 +5649,16 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					Operand *ex_opr = NULL;
 					Operand *tmpop = NULL;
 				
-					if (ex == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (ex == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					if (ex->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
 					while(cur_frame->sp > 0 && (tmpop = pop(cur_frame)) != NULL) 
 						freeOperand(tmpop);
 					//warnx("runCode: throw: %s", ex->val.vref->class->this_class->d.class.name->d.utf8.ascii);
 					
 					method_info *mi = findMethodByClass(thread, ex->val.vref->class,
-							"fillInStackTrace", "()Ljava/lang/Throwable;");
+							"fillInStackTrace", "()Ljava.lang.Throwable;");
 
 					push(cur_frame, dupOperand(ex));
 
@@ -5610,9 +5674,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					tmpw = readShort(code, &pc);
 					cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
 					Operand *ref = pop(cur_frame);
-					if (ref == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (ref == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					if (ref->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " checkcast " ANSI_RESET "%s >= %s\n",
 							ref->val.vref->class->this_class->d.class.name->d.utf8.ascii,
@@ -5621,7 +5685,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					if (!canCast(thread, 
 								ref->val.vref->class->this_class->d.class.name->d.utf8.ascii,
 								ci->name->d.utf8.ascii))
-						return throw(thread, "java/lang/ClassCastException", NULL, pc);
+						return throw(thread, "java.lang.ClassCastException", NULL, pc);
 					push(cur_frame, ref);
 				}
 				break;
@@ -5632,9 +5696,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					printf(ANSI_INSTR " instanceof\n" ANSI_RESET);
 #endif
 					Operand *ref = pop(cur_frame);
-					if (ref == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (ref == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					if (ref->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 					cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
 					tmpOp.val.vint = ref->val.vref->class == findClass(thread, ci->name->d.utf8.ascii);
 
@@ -5647,7 +5711,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 				{
 					Operand *lock = pop(cur_frame);
 					if (lock->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " monitorenter " ANSI_RESET " %s %s\n",
 							printOpType(lock->type),
@@ -5662,7 +5726,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					if ((rc = pthread_mutex_lock(&lock->val.vref->monitor)) != 0) {
 						strerror_r(rc, buf, sizeof(buf));
 						warnx("monitorenter: %s", buf);
-						return throw(thread, "java/lang/IllegalMonitorStateException", buf, pc);
+						return throw(thread, "java.lang.IllegalMonitorStateException", buf, pc);
 					}
 					// FIXME list of locks in case thread dies?
 					// FIXME if locked don't freeObject in gc
@@ -5673,7 +5737,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 				{
 					Operand *lock = pop(cur_frame);
 					if (lock->type == TYPE_NULL)
-						return throw(thread, "java/lang/NullPointerException", ERR_AT, pc);
+						return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 #ifdef DEBUG
 					printf(ANSI_INSTR " monitorexit " ANSI_RESET " %s %s\n",
 							printOpType(lock->type),
@@ -5688,7 +5752,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					if ((rc = pthread_mutex_unlock(&lock->val.vref->monitor)) != 0) {
 						strerror_r(rc, buf, sizeof(buf));
 						warnx("monitorexit: %s", buf);
-						return throw(thread, "java/lang/IllegalMonitorStateException", buf, pc);
+						return throw(thread, "java.lang.IllegalMonitorStateException", buf, pc);
 					}
 					// FIXME list of locks in case thread dies?
 					// FIXME if locked don't freeObject in gc
@@ -5704,7 +5768,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 					//bra = (int16_t)(bra - 3);
 					const int16_t bra = readBranch(code, &pc, 3);
 					Operand *one = pop(cur_frame);
-					if (one == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (one == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					if (one->type == TYPE_NULL)
 						pc += bra;
 					freeOperand(one);
@@ -5717,7 +5781,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 #endif
 					const int16_t bra = readBranch(code, &pc, 3);
 					Operand *one = pop(cur_frame);
-					if (one == NULL) return throw(thread, "java/lang/VirtualMachineError", ERR_AT, pc);
+					if (one == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 					if (one->type != TYPE_NULL)
 						pc += bra;
 					freeOperand(one);
@@ -6112,7 +6176,7 @@ static Operand *fileoutputstream_writeb(Thread *thread, ClassFile *cls, Object *
 	uint8_t a = (uint8_t)(cur_frame->local[1]->val.vint & 0xFF);
 	if (write(fd, &a, 1) == -1) {
 		warnx("fileoutputstream_writeb");
-		return throw(thread, "java/io/IOException", ERR_AT, thread->pc);
+		return throw(thread, "java.io.IOException", ERR_AT, thread->pc);
 	}
 
 	return NULL;
@@ -6176,7 +6240,7 @@ static Operand *fileoutputstream_writebarray(Thread *thread, ClassFile *cls, Obj
 fail:
 	warnx("fileoutputstream_writebarray");
 	if (buf) free(buf);
-	return throw(thread, "java/io/IOException", ERR_AT, thread->pc);
+	return throw(thread, "java.io.IOException", ERR_AT, thread->pc);
 }
 
 static Object *getClassObject(Thread *thread, ClassFile *cls)
@@ -6549,7 +6613,7 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread, ClassFile *cl
 {
 	Frame *cur_frame = currentFrame(thread);
 
-	ClassFile *ste_c = findClass(thread, "java/lang/StackTraceElement");
+	ClassFile *ste_c = findClass(thread, "java.lang.StackTraceElement");
 	if (ste_c == NULL)
 		return NULL;
 
@@ -6565,7 +6629,7 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread, ClassFile *cl
 
 	int arrpos = 0;
 	method_info *mi = findMethodByClass(thread, ste_c, "<init>", 
-			"(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
+			"(Ljava.lang.String;Ljava.lang.String;Ljava.lang.String;I)V");
 	Operand *ex_opr;
 	Object *str = NULL;
 
@@ -6656,52 +6720,52 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread, ClassFile *cl
 
 #if 0
 static const internalClass tmp_Object = {
-	.name = "java/lang/Object",
+	.name = "java.lang.Object",
 	.access = ACC_PUBLIC,
 	.methods = {
 		{.name = NULL}
 	},
-	.super = "java/lang/Object"
+	.super = "java.lang.Object"
 };
 
 static const internalClass tmp_Class = {
-	.name = "java/lang/Class",
+	.name = "java.lang.Class",
 	.access = ACC_PUBLIC,
 	.methods = {
 		{.name = NULL}
 	},
-	.super = "java/lang/Object"
+	.super = "java.lang.Object"
 };
 
 static const internalClass tmp_String = {
-	.name = "java/lang/String",
+	.name = "java.lang.String",
 	.access = ACC_PUBLIC,
 	.methods = {
 		{.name = NULL}
 	},
-	.super = "java/lang/Object"
+	.super = "java.lang.Object"
 };
 #endif
 
 static internalClass java_lang_Throwable = {
-	.name = "java/lang/Throwable",
+	.name = "java.lang.Throwable",
 	.methods = {
-		{ .name = "fillInStackTrace", .desc = "()Ljava/lang/Throwable;", .meth.mvirtual = javalangthrowable_fillInStackTrace },
+		{ .name = "fillInStackTrace", .desc = "()Ljava.lang.Throwable;", .meth.mvirtual = javalangthrowable_fillInStackTrace },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_lang_Object = {
-	.name = "java/lang/Object",
+	.name = "java.lang.Object",
 	.methods = {
 		{ .name = "hashCode", .desc = "()I",				.meth.mvirtual = javalangobject_hashCode },
-		{ .name = "getClass", .desc = "()Ljava/lang/Class;",.meth.mvirtual = javalangobject_getClass },
+		{ .name = "getClass", .desc = "()Ljava.lang.Class;",.meth.mvirtual = javalangobject_getClass },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_io_FileOutputStream = {
-	.name = "java/io/FileOutputStream",
+	.name = "java.io.FileOutputStream",
 	.methods = {
 		{ .name = "write", .desc = "(I)V",	.meth.mvirtual = fileoutputstream_writeb },
 		{ .name = "write", .desc = "([B)V", .meth.mvirtual = fileoutputstream_writebarray },
@@ -6710,25 +6774,25 @@ static internalClass java_io_FileOutputStream = {
 };
 
 static internalClass java_lang_Thread = {
-	.name = "java/lang/Thread",
+	.name = "java.lang.Thread",
 	.methods = {
 		{ .name = "nativeStart",	.desc = "()V",					.meth.mvirtual = javalangthread_nativeStart },
 		{ .name = "sleep",			.desc = "(JI)V",				.meth.mstatic = javalangthread_sleep },
-		{ .name = "currentThread",	.desc = "()Ljava/lang/Thread;", .meth.mstatic = javalangthread_currentThread },
+		{ .name = "currentThread",	.desc = "()Ljava.lang.Thread;", .meth.mstatic = javalangthread_currentThread },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_lang_reflect_Array = {
-	.name = "java/lang/reflect/Array",
+	.name = "java.lang.reflect/Array",
 	.methods = {
-		{ .name = "newInstance", .desc = "(Ljava/lang/Class;[I)Ljava/lang/Object;", .meth.mstatic = javalangreflectarray_newInstance },
+		{ .name = "newInstance", .desc = "(Ljava.lang.Class;[I)Ljava.lang.Object;", .meth.mstatic = javalangreflectarray_newInstance },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_lang_System = {
-	.name = "java/lang/System",
+	.name = "java.lang.System",
 	.methods = {
 		{ .name = "exit",				.desc = "(I)V", .meth.mstatic = javalangsystem_exit },
 		{ .name = "currentTimeMillis",	.desc = "()J",	.meth.mstatic = javalangsystem_currentTimeMillis },
@@ -6737,16 +6801,16 @@ static internalClass java_lang_System = {
 };
 
 static internalClass java_lang_ClassLoader = {
-	.name = "java/lang/ClassLoader",
+	.name = "java.lang.ClassLoader",
 	.methods = {
-		{ .name = "findLoadedClass",	.desc = "(Ljava/lang/String;)Ljava/lang/Class;", .meth.mvirtual = javalangclassloader_findLoadedClass },
-		{ .name = "findClass",			.desc = "(Ljava/lang/String;)Ljava/lang/Class;", .meth.mvirtual = javalangclassloader_findClass },
+		{ .name = "findLoadedClass",	.desc = "(Ljava.lang.String;)Ljava.lang.Class;", .meth.mvirtual = javalangclassloader_findLoadedClass },
+		{ .name = "findClass",			.desc = "(Ljava.lang.String;)Ljava.lang.Class;", .meth.mvirtual = javalangclassloader_findClass },
 		{.name = NULL}
 	}
 };
 
 static internalClass java_lang_Double = {
-	.name = "java/lang/Double",
+	.name = "java.lang.Double",
 	.methods = {
 		{ .name = "longBitsToDouble",	.desc = "(J)D", .meth.mstatic = javalangdouble_longBitsToDouble },
 		{ .name = "doubleToRawLongBits",.desc = "(D)J", .meth.mstatic = javalangdouble_doubleToRawLongBits },
@@ -6755,7 +6819,7 @@ static internalClass java_lang_Double = {
 };
 
 static internalClass java_lang_Math = {
-	.name = "java/lang/Math",
+	.name = "java.lang.Math",
 	.methods = {
 		{ .name = "atan2",	.desc = "(DD)D",.meth.mstatic = javalangmath_atan2 },
 		{ .name = "hypot",	.desc = "(DD)D",.meth.mstatic = javalangmath_hypot },
@@ -6812,8 +6876,8 @@ ClassFile *buildInternalClass(internalClass *ic)
 	if ((ret->methods = calloc(MAX_METHODS, sizeof(method_info *))) == NULL)
 		goto fail;
 
-	if (ic->super == NULL && strcmp(ic->name, "java/lang/Object")) {
-		super = strdup("java/lang/Object");
+	if (ic->super == NULL && strcmp(ic->name, "java.lang.Object")) {
+		super = strdup("java.lang.Object");
 	} else
 		super = strdup(ic->super);
 
@@ -6938,8 +7002,9 @@ static void dumpConstantPool(const int me, const cp_info *cp)
 	{
 		case CONSTANT_Class:
 			{
-				const cp_Class_info *ent = (cp_Class_info *)cp;
-				printf("class:  name[%d]=%s", ent->name_index, ent->name->d.utf8.ascii);
+				printf("class:  name[%d]=%s", 
+						cp->d.class.name_index, 
+						cp->d.class.name->d.utf8.ascii);
 			}
 			break;
 		case CONSTANT_Fieldref:
@@ -7081,6 +7146,8 @@ static void dumpAttribute(const attribute_info *ai)
 			break;
 		case ATTR_STACKMAPTABLE:
 		case ATTR_BOOTSTRAPMETHODS:
+		case ATTR_SOURCEFILE:
+		case ATTR_LINENUMBERTABLE:
 		default:
 			printf("<<dump not implemented>>");
 			break;
@@ -7095,9 +7162,9 @@ static void dumpField(const int me, const field_info *fi)
 	printf(" [%2d]: ", me);
 	printAccessFlags(fi->access_flags, buf);
 	printf("access=%s name=%s descriptor=%s\n",
+			buf,
 			fi->name->d.utf8.ascii,
-			fi->descriptor->d.utf8.ascii,
-			buf
+			fi->descriptor->d.utf8.ascii
 		  );
 
 	for (int i = 0; i < fi->attributes_count; i++)
@@ -7113,9 +7180,9 @@ static void dumpMethod(const int me, method_info *mi)
 	char buf[BUFSIZ];
 	printAccessFlags(mi->access_flags, buf);
 	printf("access=%s name=%s descriptor=%s\n",
+			buf,
 			mi->name->d.utf8.ascii,
-			mi->descriptor->d.utf8.ascii,
-			buf
+			mi->descriptor->d.utf8.ascii
 		  );
 
 	for (int i = 0; i < mi->attributes_count; i++)
@@ -7446,11 +7513,28 @@ static const char *search[] = {
 	NULL
 };
 
-static ClassFile *loadClass(Thread *thread, const char *file)
+static ClassFile *loadClass(Thread *thread, const char *sfile)
 {
 	ClassFile *ret;
 	FILE *fp;
 	char buf[BUFSIZ];
+	char file[BUFSIZ];
+
+	const char *start;
+	
+	if ((start = strstr(sfile, ".class")) == NULL)
+		start = (char *)(sfile + strlen(sfile));
+
+	file[start - sfile] = '\0';
+	start--;
+
+	while(start >= sfile)
+	{
+		file[start - sfile] = *start == '.' ? '/' : *start;
+		start--;
+	}
+
+	//printf("trying: %s\n", file);
 
 	if (strchr(file, '/')) {
 		snprintf(buf, sizeof(buf), "cp/%s%s", file, 
@@ -7464,6 +7548,8 @@ static ClassFile *loadClass(Thread *thread, const char *file)
 			{
 				snprintf(buf, sizeof(buf), "%s/%s", search[i], file);
 				if ((fp = fopen(buf, "r")) != NULL) break;
+				snprintf(buf, sizeof(buf), "%s/%s.class", search[i], file);
+				if ((fp = fopen(buf, "r")) != NULL) break;
 			}
 		}
 	}
@@ -7475,6 +7561,10 @@ static ClassFile *loadClass(Thread *thread, const char *file)
 
 	ret = parseClass(thread, fp);
 	fclose(fp);
+
+#ifdef DEBUG
+	dumpClass(ret);
+#endif
 
 	return ret;
 }
@@ -8100,7 +8190,7 @@ static Thread *newThread(JVM *jvm, Object *thread)
 		ret->thread->lock++; // lock-- in freeThread
 	} else if (jvm->VM) {
 		if ((ret->thread = newObject(ret, findClass(ret, 
-							"java/lang/Thread"))) == NULL) goto fail;
+							"java.lang.Thread"))) == NULL) goto fail;
 		ret->thread->lock++; // lock-- in freeThread
 	} else // jvm->VM == false
 		ret->thread = NULL;
@@ -8344,16 +8434,16 @@ int main(const int ac, const char *av[])
 	ClassFile *cls_String, *cls_Class, *cls_Object, *cls_ClassLoader;
 
 	/* load classes with circular references */
-	if ((cls_Object = loadClass(parent, "java/lang/Object")) == NULL) errx(1, "unable to load java/lang/Object");
-	if ((cls_String = loadClass(parent, "java/lang/String")) == NULL) errx(1, "unable to load java/lang/String");
-	if ((cls_Class = loadClass(parent, "java/lang/Class")) == NULL) errx(1, "unable to load java/lang/Class");
-	if ((cf = loadClass(parent, "java/lang/Thread")) == NULL) errx(1, "unable to load java/lang/Thread");
-	if ((cls_ClassLoader = loadClass(parent, "java/lang/ClassLoader")) == NULL) errx(1, "unable to load java/lang/ClassLoader");
+	if ((cls_Object = loadClass(parent, "java.lang.Object")) == NULL) errx(1, "unable to load java.lang.Object");
+	if ((cls_String = loadClass(parent, "java.lang.String")) == NULL) errx(1, "unable to load java.lang.String");
+	if ((cls_Class = loadClass(parent, "java.lang.Class")) == NULL) errx(1, "unable to load java.lang.Class");
+	if ((cf = loadClass(parent, "java.lang.Thread")) == NULL) errx(1, "unable to load java.lang.Thread");
+	if ((cls_ClassLoader = loadClass(parent, "java.lang.ClassLoader")) == NULL) errx(1, "unable to load java.lang.ClassLoader");
 	/*
-	if (loadClass(parent, "java/lang/String") == NULL) errx(1, "unable to load java/langString");
-	if (loadClass(parent, "java/lang/ClassLoader") == NULL) errx(1, "unable to load java/langClassLoader");
-	if ((cf = loadClass(parent, "java/lang/Class")) == NULL) errx(1, "unable to load java/langClass");
-	if (loadClass(parent, "java/lang/Thread") == NULL) errx(1, "unable to load java/lang/Thread");
+	if (loadClass(parent, "java.lang.String") == NULL) errx(1, "unable to load java/langString");
+	if (loadClass(parent, "java.lang.ClassLoader") == NULL) errx(1, "unable to load java/langClassLoader");
+	if ((cf = loadClass(parent, "java.lang.Class")) == NULL) errx(1, "unable to load java/langClass");
+	if (loadClass(parent, "java.lang.Thread") == NULL) errx(1, "unable to load java.lang.Thread");
 	if (loadClass(parent, "java/io/FileOutputStream") == NULL) errx(1, "unable to load java/io/FileOutputStream");
 	*/
 	jvm->VM = true;
@@ -8432,7 +8522,7 @@ int main(const int ac, const char *av[])
 		primitiveClassMap[i].class = fi->static_operand->val.vref;
 	}
 
-	if ((parent->thread = newObject(parent, findClass2(parent, "java/lang/Thread", false))) == NULL)
+	if ((parent->thread = newObject(parent, findClass2(parent, "java.lang.Thread", false))) == NULL)
 		errx(EXIT_FAILURE, "boot: unable to create Thread Object");
 	parent->thread->lock++;
 
@@ -8447,7 +8537,7 @@ int main(const int ac, const char *av[])
 	linkClass(parent, cf);
 	
 	const char *clsname = ac > 2 ? av[2] : av[1];
-	method_info *m_Main = findClassMethod(parent, clsname, "main", "([Ljava/lang/String;)V");
+	method_info *m_Main = findClassMethod(parent, clsname, "main", "([Ljava.lang.String;)V");
 	if (m_Main == NULL)
 		errx(EXIT_FAILURE, "boot: Cannot find method main in class %s", clsname);
 	
@@ -8455,7 +8545,7 @@ int main(const int ac, const char *av[])
 
 	push(cur_frame, newOperand(TYPE_AREF, 
 				newArray(parent, TYPE_OREF, 0, 
-					findClass(parent, "java/lang/String"))));
+					findClass(parent, "java.lang.String"))));
 	
 	startThread(parent);
 
