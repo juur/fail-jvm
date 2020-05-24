@@ -7,7 +7,7 @@ CFLAGS		:=	-std=c99 \
 	-Wno-unused-parameter \
 	-Wformat=2 \
 	-fsingle-precision-constant \
-	-Wabi -Wbad-function-cast \
+	-Wbad-function-cast \
 	-Wconversion \
 	-Wfloat-equal -Winit-self \
 	-Wjump-misses-init \

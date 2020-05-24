@@ -4,6 +4,7 @@
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 #define ERR_AT	__FILE__ ":" TOSTRING(__LINE__)
+#define STRING_TOO_LONG() warnx("snprintf truncation:" ERR_AT)
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -31,49 +32,49 @@
 
 /* access flags */
 
-#define	ACC_PUBLIC		0x0001
-#define ACC_PRIVATE		0x0002
-#define ACC_PROTECTED	0x0004
-#define ACC_STATIC		0x0008
-#define ACC_FINAL		0x0010
-#define ACC_SUPER		0x0020
-#define ACC_SYNCH		0x0020
-#define ACC_VOLATILE	0x0040
-#define ACC_BRIDGE		0x0040
-#define ACC_TRANSIENT	0x0080
-#define ACC_NATIVE		0x0100
-#define ACC_INTERFACE	0x0200
-#define	ACC_ABSTRACT	0x0400
-#define ACC_STRICT		0x0800
-#define ACC_SYNTHETIC	0x1000
-#define ACC_ANNOTATION	0x2000
-#define ACC_ENUM		0x4000
+#define	ACC_PUBLIC		((unsigned)0x0001)
+#define ACC_PRIVATE		((unsigned)0x0002)
+#define ACC_PROTECTED	((unsigned)0x0004)
+#define ACC_STATIC		((unsigned)0x0008)
+#define ACC_FINAL		((unsigned)0x0010)
+#define ACC_SUPER		((unsigned)0x0020)
+#define ACC_SYNCH		((unsigned)0x0020)
+#define ACC_VOLATILE	((unsigned)0x0040)
+#define ACC_BRIDGE		((unsigned)0x0040)
+#define ACC_TRANSIENT	((unsigned)0x0080)
+#define ACC_NATIVE		((unsigned)0x0100)
+#define ACC_INTERFACE	((unsigned)0x0200)
+#define	ACC_ABSTRACT	((unsigned)0x0400)
+#define ACC_STRICT		((unsigned)0x0800)
+#define ACC_SYNTHETIC	((unsigned)0x1000)
+#define ACC_ANNOTATION	((unsigned)0x2000)
+#define ACC_ENUM		((unsigned)0x4000)
 
-#define TYPE_BYTE		'B'
-#define TYPE_CHAR		'C'
-#define TYPE_DOUBLE		'D'
-#define TYPE_FLOAT		'F'
-#define TYPE_INT		'I'
-#define TYPE_LONG		'J'
-#define TYPE_OREF		'L'
-#define TYPE_AREF		'['
-#define	TYPE_SHORT		'S'
-#define	TYPE_BOOL		'Z'
-#define TYPE_VOID		'V'
-#define TYPE_NULL		'N'
-#define TYPE_RETADDR	'\r'	
+#define TYPE_BYTE		((char)'B')
+#define TYPE_CHAR		((char)'C')
+#define TYPE_DOUBLE		((char)'D')
+#define TYPE_FLOAT		((char)'F')
+#define TYPE_INT		((char)'I')
+#define TYPE_LONG		((char)'J')
+#define TYPE_OREF		((char)'L')
+#define TYPE_AREF		((char)'[')
+#define	TYPE_SHORT		((char)'S')
+#define	TYPE_BOOL		((char)'Z')
+#define TYPE_VOID		((char)'V')
+#define TYPE_NULL		((char)'N')
+#define TYPE_RETADDR	((char)'\r')
 
-#define T_BOOLEAN	4
-#define T_CHAR		5
-#define T_FLOAT		6
-#define	T_DOUBLE	7
-#define T_BYTE		8
-#define	T_SHORT		9
-#define	T_INT		10
-#define	T_LONG		11
-#define T_MAX		12
+#define T_BOOLEAN	((int)4)
+#define T_CHAR		((int)5)
+#define T_FLOAT		((int)6)
+#define	T_DOUBLE	((int)7)
+#define T_BYTE		((int)8)
+#define	T_SHORT		((int)9)
+#define	T_INT		((int)10)
+#define	T_LONG		((int)11)
+#define T_MAX		((int)12)
 
-const uint8_t atypemap[T_MAX] = {
+static const uint8_t atypemap[T_MAX] = {
 /*	0, 0, 0, 0,
 	T_BOOLEAN,
 	T_CHAR,
@@ -100,20 +101,20 @@ const uint8_t atypemap[T_MAX] = {
 /* value of .tag */
 
 
-#define CONSTANT_Class				7
-#define CONSTANT_Double				6
-#define CONSTANT_Fieldref			9
-#define CONSTANT_Float				4
-#define CONSTANT_Integer			3
-#define CONSTANT_InterfaceMethodref	11
-#define CONSTANT_InvokeDynamic		18
-#define CONSTANT_Long				5
-#define CONSTANT_MethodHandle		15
-#define CONSTANT_MethodType			16
-#define CONSTANT_Methodref			10
-#define CONSTANT_NameAndType		12
-#define CONSTANT_String				8
-#define CONSTANT_Utf8				1
+#define CONSTANT_Class				((uint8_t)7)
+#define CONSTANT_Double				((uint8_t)6)
+#define CONSTANT_Fieldref			((uint8_t)9)
+#define CONSTANT_Float				((uint8_t)4)
+#define CONSTANT_Integer			((uint8_t)3)
+#define CONSTANT_InterfaceMethodref	((uint8_t)11)
+#define CONSTANT_InvokeDynamic		((uint8_t)18)
+#define CONSTANT_Long				((uint8_t)5)
+#define CONSTANT_MethodHandle		((uint8_t)15)
+#define CONSTANT_MethodType			((uint8_t)16)
+#define CONSTANT_Methodref			((uint8_t)10)
+#define CONSTANT_NameAndType		((uint8_t)12)
+#define CONSTANT_String				((uint8_t)8)
+#define CONSTANT_Utf8				((uint8_t)1)
 
 struct _cp_info;
 
@@ -394,14 +395,14 @@ typedef struct {
 	} i;
 } stack_map_frame;
 
-#define ITEM_Top				0
-#define	ITEM_Integer			1
-#define ITEM_Float				2
-#define ITEM_Double				3
-#define ITEM_Long				4
-#define	ITEM_Null				5
-#define ITEM_UninitialisedThis	6
-#define ITEM_Object				7
+#define ITEM_Top				((int)0)
+#define	ITEM_Integer			((int)1)
+#define ITEM_Float				((int)2)
+#define ITEM_Double				((int)3)
+#define ITEM_Long				((int)4)
+#define	ITEM_Null				((int)5)
+#define ITEM_UninitialisedThis	((int)6)
+#define ITEM_Object				((int)7)
 
 typedef struct {
 	uint16_t		  number_of_entries;
@@ -539,8 +540,8 @@ typedef struct {
 	field_info	*field_info;
 } Field;
 
-#define OBJ_CLASS	1
-#define OBJ_ARRAY	2
+#define OBJ_CLASS	((uint8_t)1)
+#define OBJ_ARRAY	((uint8_t)2)
 
 typedef struct _Object {
 	uint8_t		type;
@@ -570,7 +571,7 @@ typedef struct _Object {
 } Object;
 
 
-uint16_t framecounter = 0;
+static uint16_t framecounter = 0;
 
 typedef struct {
 	uint16_t	  frameNum;
@@ -593,10 +594,10 @@ typedef enum _th_state_en {
 	TH_DEAD
 } th_state_en;
 
-#define MAX_THREADS	16
-#define	MAX_STACK	1024
-#define MAX_HEAP	2048
-#define MAX_METHOD	256
+#define MAX_THREADS	((unsigned)16)
+#define	MAX_STACK	((unsigned)1024)
+#define MAX_HEAP	((unsigned)2048)
+#define MAX_METHOD	((unsigned)256)
 
 typedef struct _Thread {
 	Frame			*stack[MAX_STACK];
@@ -624,9 +625,9 @@ typedef struct _JVM {
 
 /* hard coded classes */
 
-#define MAX_FIELDS		16
-#define MAX_METHODS		16
-#define MAX_INTERFACES	16
+#define MAX_FIELDS		((unsigned)16)
+#define MAX_METHODS		((unsigned)16)
+#define MAX_INTERFACES	((unsigned)16)
 
 typedef struct {
 	const char *name;
@@ -664,7 +665,7 @@ typedef struct {
  * Constants 
  */
 
-static struct predefinedAttribute predefinedAttrs[] = {
+static const struct predefinedAttribute predefinedAttrs[] = {
 {ATTR_CONSTANT_VALUE,	"ConstantValue",	sizeof(ConstantValue_attribute)},
 {ATTR_CODE,				"Code",				sizeof(Code_attribute)},
 {ATTR_STACKMAPTABLE,	"StackMapTable",	sizeof(StackMapTable_attribute)},
@@ -730,7 +731,10 @@ void dumpFrame(Frame *f);
 void dumpStack(Frame *frame, char *op);
 void disasm(uint8_t *code, uint32_t len);
 #endif
-ClassFile *buildInternalClass(internalClass *ic);
+
+#if 0
+static ClassFile *buildInternalClass(internalClass *ic);
+#endif
 
 /*
  * Inline function defintions
@@ -836,7 +840,7 @@ static const char *printOpValue(Operand *op)
 	return buf;
 }
 
-void dumpStack(Frame *frame, char *op)
+static void dumpStack(Frame *frame, char *op)
 {
 	if (!frame->sp) {
 		printf(" %4s\t<now empty>\n", op);
@@ -858,7 +862,7 @@ void dumpStack(Frame *frame, char *op)
 }
 #endif
 
-static bool push(Frame * frame, Operand * op)
+static bool push(Frame *frame, Operand *op)
 {
 	assert(op != 0);
 	assert(op->type != 0);
@@ -870,17 +874,20 @@ static bool push(Frame * frame, Operand * op)
 	return true;
 }
 
-static Operand *pop(Frame * frame)
+static Operand *pop(Frame *frame)
 {
 	assert(frame->sp > 0);
+
 	Operand *ret = (Operand *)frame->stack[--frame->sp];
 	frame->stack[frame->sp] = NULL;
+
 	return ret;
 }
 
-static Operand *getLocal(Frame * frame, uint16_t slot)
+static Operand *getLocal(Frame *frame, uint16_t slot)
 {
 	assert(slot < frame->num_local);
+
 	return frame->local[slot];
 }
 
@@ -900,7 +907,7 @@ static void clearAndFreeLocal(Frame *frame, uint16_t slot)
 	freeOperand((Operand *)value);
 }
 
-static Operand *setLocal(Frame * frame, uint16_t slot, Operand *value)
+static Operand *setLocal(Frame *frame, uint16_t slot, Operand *value)
 {
 	if (value == NULL || slot >= frame->num_local) return NULL;
 
@@ -939,21 +946,21 @@ static void printAccessFlags(uint16_t flag, char *buf)
 }
 #endif
 
-static bool read4(FILE * f, uint32_t * dst)
+static bool read4(FILE *f, uint32_t *dst)
 {
 	if ( (fread(dst, 1, sizeof(uint32_t), f)) != sizeof(uint32_t)) return false;
 	*dst = ntohl(*dst);
 	return true;
 }
 
-static bool read2(FILE * f, uint16_t * dst)
+static bool read2(FILE *f, uint16_t *dst)
 {
 	if ( (fread(dst, 1, sizeof(uint16_t), f)) != sizeof(uint16_t)) return false;
 	*dst = ntohs(*dst);
 	return true;
 }
 
-static bool read1(FILE * f, uint8_t * dst)
+static bool read1(FILE *f, uint8_t *dst)
 {
 	if ( (fread(dst, 1, sizeof(uint8_t), f)) != sizeof(uint8_t)) return false;
 	return true;
@@ -1024,9 +1031,9 @@ static cp_info *readConstantPool(FILE *f)
 						(dbl >= 0xfff0000000000001L && dbl <= 0xffffffffffffffffL))
 					val = NAN;
 				else {
-					int s = ((dbl >> 63) == 0) ? 1 : -1;
-					int e = (int)((dbl >> 52) & 0x7FFL);
-					long m = (e == 0) ? 
+					const int s = ((dbl >> 63) == 0) ? 1 : -1;
+					const int e = (int)((dbl >> 52) & 0x7FFL);
+					const long m = (e == 0) ? 
 						(long)((dbl & 0xfffffffffffffL) << 1) :
 						(long)((dbl & 0xfffffffffffffL) | 0x10000000000000L);
 					val = (double)(s * m) * pow(2, e - 1075);
@@ -1091,9 +1098,9 @@ static cp_info *readConstantPool(FILE *f)
 						(tmp > 0xf8000000 && tmp <= 0xffffffff)) 
 					tmpf = NAN;
 				else {
-					int s = ((tmp >> 31) == 0) ? 1 : -1;
-					int e = ((tmp >> 23) & 0xFF);
-					int m = (e == 0) ?
+					const int s = ((tmp >> 31) == 0) ? 1 : -1;
+					const int e = ((tmp >> 23) & 0xFF);
+					const int m = (e == 0) ?
 						(int)((tmp & 0x7FFFFF) << 1) :
 						(int)((tmp & 0x7FFFFF) | 0x800000);
 					tmpf = (float)(s * m * pow(2, e - 150));
@@ -1436,7 +1443,7 @@ static attribute_info *readAttribute(Thread *thread, uint32_t me, FILE *f, cp_in
 	if (!read4(f, &len)) return NULL;
 
 	bool found = false;
-	struct predefinedAttribute *pa;
+	const struct predefinedAttribute *pa;
 
 	for (int i = 0; ((pa = &predefinedAttrs[i])->name) != NULL; i++)
 	{
@@ -6153,6 +6160,7 @@ static void freeOperand(Operand * o)
 				else
 					o->val.vref->lock--;
 			}
+			/* FALLTHRU */
 		default:
 			o->type = TYPE_NULL;
 			free(o);
@@ -6839,6 +6847,7 @@ static internalClass java_lang_Math = {
 	}
 };
 
+#if 0
 ClassFile *buildInternalClass(internalClass *ic)
 {
 	uint16_t cp_ptr = 1;
@@ -6992,6 +7001,7 @@ fail:
 	warnx("Failed to process internalClass");
 	return NULL;
 }
+#endif
 
 #ifdef DEBUG
 static void dumpConstantPool(const int me, const cp_info *cp)
@@ -7537,8 +7547,10 @@ static ClassFile *loadClass(Thread *thread, const char *sfile)
 	//printf("trying: %s\n", file);
 
 	if (strchr(file, '/')) {
-		snprintf(buf, sizeof(buf), "cp/%s%s", file, 
-				strstr(file, ".class") != NULL ? "" : ".class");
+		if(snprintf(buf, sizeof(buf), "cp/%s%s", file, 
+				strstr(file, ".class") != NULL ? "" : ".class") > (int)sizeof(buf)) {
+			STRING_TOO_LONG();
+		}
 		fp = fopen(buf, "r");
 	} else {
 		snprintf(buf, sizeof(buf), "%s", file);
@@ -7546,9 +7558,13 @@ static ClassFile *loadClass(Thread *thread, const char *sfile)
 		if ((fp = fopen(buf, "r")) == NULL) {
 			for (int i = 0; search[i]; i++)
 			{
-				snprintf(buf, sizeof(buf), "%s/%s", search[i], file);
+				if(snprintf(buf, sizeof(buf), "%s/%s", search[i], file) > (int)sizeof(buf)) {
+					STRING_TOO_LONG();
+				}
 				if ((fp = fopen(buf, "r")) != NULL) break;
-				snprintf(buf, sizeof(buf), "%s/%s.class", search[i], file);
+				if(snprintf(buf, sizeof(buf), "%s/%s.class", search[i], file) > (int)sizeof(buf)) {
+					STRING_TOO_LONG();
+				}
 				if ((fp = fopen(buf, "r")) != NULL) break;
 			}
 		}
@@ -7571,7 +7587,6 @@ static ClassFile *loadClass(Thread *thread, const char *sfile)
 
 static void freeAttribute(attribute_info *ai)
 {
-
 	const struct predefinedAttribute *pa;
 	bool found = false;
 
@@ -7719,6 +7734,7 @@ static void freeAttribute(attribute_info *ai)
 
 	free(ai);
 }
+
 #ifdef DEBUG
 const char *printObject(Object *o)
 {
@@ -8009,9 +8025,6 @@ static void freeJVM(JVM *j)
 {
 	int rc;
 	char buf[BUFSIZ] = {0};
-#ifdef DEBUG
-	printf("freeJVM: start\n");
-#endif
 
 	int count;
 
@@ -8036,10 +8049,6 @@ static void freeJVM(JVM *j)
 
 		for (uint16_t id = 0; id < MAX_THREADS; id++) {
 			if (j->threads[id]) {
-#ifdef DEBUG
-				printThreadState(j->threads[id]->state, buf);
-				printf("freeJVM: thread #%d is %s\n", id, buf);
-#endif
 				if (j->threads[id]->state == TH_FINISHED) {
 					pthread_join(j->threads[id]->pthread, (void **)&ex_op);
 					j->threads[id]->state = TH_DEAD;
@@ -8087,14 +8096,11 @@ static void freeJVM(JVM *j)
 	}
 
 
-	for (int k = 0; k < 10; k++) {
+	for (int k = 0; k < 10; k++) 
+	{
 		for (uint16_t i = 0; i < MAX_HEAP; i++)
 		{
 			if (j->heap[i]) {
-#ifdef DEBUG
-			if (k == 9)
-				printf("Trying on attempt #9: %s\n", printObject(j->heap[i]));
-#endif
 				freeObject(j, j->heap[i]);
 			}
 		}
@@ -8448,7 +8454,9 @@ int main(const int ac, const char *av[])
 	*/
 	jvm->VM = true;
 
+#ifdef DEBUG
 	printf("boot: VM now enabled\n");
+#endif
 
 	cls_Class->isLinked = true;
 	cls_String->isLinked = true;
@@ -8465,7 +8473,9 @@ int main(const int ac, const char *av[])
 	cls_ClassLoader->isLinked = false;
 	linkClass(parent, cls_ClassLoader);
 
+#ifdef DEBUG
 	printf("boot: linking early classes\n");
+#endif
 	/* ensure getClass() works on them */
 	for (uint16_t i = 0; i < MAX_METHOD; i++)
 	{
@@ -8476,7 +8486,9 @@ int main(const int ac, const char *av[])
 			linkClass(parent, ret);
 	}
 
+#ifdef DEBUG
 	printf("boot: patching natives\n");
+#endif
 	/* patch natives */
 	cf = processNatives(parent, &java_lang_Object);
 	if (cf == NULL) exit(1);
