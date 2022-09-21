@@ -18,6 +18,14 @@ public final class Short extends Number {
     SIZE = 16;
   }
 
+  public static int parseShort(final String str) {
+    return parseShort(str, 10);
+  }
+
+  public static int parseShort(final String str, final int radix) {
+    return (int) Number.atoi(str.toCharArray(), radix, MAX_VALUE, MIN_VALUE);
+  }
+
   private short value;
 
   @Override

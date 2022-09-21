@@ -22,7 +22,7 @@ public abstract class Charset implements Comparable<Charset> {
   }
 
   public static Charset defaultCharset() {
-    return spod.cs.CP1252.INSTANCE;
+    return spod.cs.UTF_8.INSTANCE;
   }
 
   static Charset forName(final String charsetName) {

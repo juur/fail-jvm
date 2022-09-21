@@ -16,8 +16,8 @@ public final class ByteOrder {
 
   private final String name;
 
-  private ByteOrder(final String name) {
-    this.name = name;
+  private ByteOrder(final String newName) {
+    this.name = newName;
   }
 
   @Override

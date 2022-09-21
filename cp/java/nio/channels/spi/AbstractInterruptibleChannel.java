@@ -9,23 +9,26 @@ public abstract class AbstractInterruptibleChannel implements InterruptibleChann
 
   }
 
+  protected final void begin() {
+
+  }
+
   @Override
   public final void close() throws IOException {
 
   }
 
-  @Override
-  public final boolean isOpen() {
-    return false;
-  }
-
-  protected final void begin() {
-
-  }
-
+  /**
+   * @throws AsynchronousCloseException
+   */
   protected final void end(final boolean completed) throws AsynchronousCloseException {
 
   }
 
   protected abstract void implCloseChannel() throws IOException;
+
+  @Override
+  public final boolean isOpen() {
+    return false;
+  }
 }

@@ -6,11 +6,11 @@ public class GregorianCalendar extends Calendar {
 
     int year, month, day;
 
-    public Tuple(final int year, final int month, final int day) {
+    public Tuple(final int newYear, final int newMonth, final int newDay) {
       super();
-      this.year = year;
-      this.month = month;
-      this.day = day;
+      year = newYear;
+      month = newMonth;
+      day = newDay;
     }
   }
 
@@ -55,8 +55,8 @@ public class GregorianCalendar extends Calendar {
 
   }
 
-  public Tuple civil_from_days(int z) {
-    z += 719468;
+  public Tuple civil_from_days(final int days) {
+    final int z     = days + 719468;
     final int era   = (z >= 0 ? z : z - 146096) / 146097;
     final int doe   = z - era * 146097;
     final int yoe   = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
@@ -69,8 +69,31 @@ public class GregorianCalendar extends Calendar {
     return new Tuple(year, month, day);
   }
 
-  public int days_from_civil(int y, final int m, final int d) {
-    y -= m <= 2 ? 1 : 0;
+  @Override
+  protected void computeFields() {
+    final int   days      = (int) (time / (24 * 60 * 60 * 1000));
+    // final int remainder = (int) (time % (24 * 60 * 60 * 1000));
+    final Tuple a         = civil_from_days(days);
+    set(YEAR, a.year);
+    set(MONTH, a.month);
+    set(DAY_OF_MONTH, a.day);
+    set(DAY_OF_WEEK, weekday_from_days(days));
+  }
+
+  @Override
+  protected void computeTime() {
+    final int year  = get(YEAR);
+    final int month = get(MONTH);
+    final int day   = get(DAY_OF_MONTH);
+    time = days_from_civil(year, month, day) * 24 * 60 * 60 * 1000;
+    time += 1000 * 60 * 60 * get(HOUR_OF_DAY);
+    time += 1000 * 60 * get(MINUTE);
+    time += 1000 * get(SECOND);
+    time += get(MILLISECOND);
+  }
+
+  public int days_from_civil(final int year, final int m, final int d) {
+    final int y   = year - (m <= 2 ? 1 : 0);
     final int era = (y >= 0 ? y : y - 399) / 400;
     final int yoe = y - era * 400;
     final int doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
@@ -117,28 +140,5 @@ public class GregorianCalendar extends Calendar {
 
   public int weekday_from_days(final int z) {
     return z >= -4 ? (z + 4) % 7 : (z + 5) % 7 + 6;
-  }
-
-  @Override
-  protected void computeFields() {
-    final int   days      = (int) (time / (24 * 60 * 60 * 1000));
-    // final int remainder = (int) (time % (24 * 60 * 60 * 1000));
-    final Tuple a         = civil_from_days(days);
-    set(YEAR, a.year);
-    set(MONTH, a.month);
-    set(DAY_OF_MONTH, a.day);
-    set(DAY_OF_WEEK, weekday_from_days(days));
-  }
-
-  @Override
-  protected void computeTime() {
-    final int year  = get(YEAR);
-    final int month = get(MONTH);
-    final int day   = get(DAY_OF_MONTH);
-    time = days_from_civil(year, month, day) * 24 * 60 * 60 * 1000;
-    time += 1000 * 60 * 60 * get(HOUR_OF_DAY);
-    time += 1000 * 60 * get(MINUTE);
-    time += 1000 * get(SECOND);
-    time += get(MILLISECOND);
   }
 }

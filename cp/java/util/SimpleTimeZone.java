@@ -1,9 +1,5 @@
 package java.util;
 
-import java.util.TimeZone;
-import java.util.Date;
-import java.util.Calendar;
-
 public class SimpleTimeZone extends TimeZone {
 
   final static long serialVersionUID = 1L;
@@ -25,46 +21,55 @@ public class SimpleTimeZone extends TimeZone {
   private int startTime;
   private int startTimeMode;
 
-  public SimpleTimeZone(final int rawOffset, final String ID) {
-    System.out.println("SimpleTimeZone(" + rawOffset + "," + ID + ")");
-    setRawOffset(rawOffset);
+  public SimpleTimeZone(final int newRawOffset, final String ID) {
+    setRawOffset(newRawOffset);
     setID(ID);
     setDSTSavings(0);
   }
 
   public SimpleTimeZone(
-    final int rawOffset, final String ID, final int startMonth, final int startDay, final int startDayOfWeek, final int startTime,
-    final int endMonth, final int endDay, final int endDayOfWeek, final int endTime
+    final int newRawOffset, final String ID, final int newStartMonth, final int newStartDay,
+    final int newStartDayOfWeek, final int newStartTime, final int newEndMonth, final int newEndDay,
+    final int newEndDayOfWeek, final int newEndTime
     ) {
-    this(rawOffset, ID, startMonth, startDay, startDayOfWeek, startTime, SimpleTimeZone.WALL_TIME, endMonth, endDay, endDayOfWeek, endTime,
+    this(newRawOffset, ID, newStartMonth, newStartDay, newStartDayOfWeek, newStartTime,
+      SimpleTimeZone.WALL_TIME, newEndMonth, newEndDay, newEndDayOfWeek, newEndTime,
       SimpleTimeZone.WALL_TIME, 3600000);
   }
 
   public SimpleTimeZone(
-    final int rawOffset, final String ID, final int startMonth, final int startDay, final int startDayOfWeek, final int startTime,
-    final int endMonth, final int endDay, final int endDayOfWeek, final int endTime, final int dstSavings
+    final int newRawOffset, final String ID, final int newStartMonth, final int newStartDay,
+    final int newStartDayOfWeek, final int newStartTime, final int newEndMonth, final int newEndDay,
+    final int newEndDayOfWeek, final int newEndTime, final int newDstSavings
     ) {
-    this(rawOffset, ID, startMonth, startDay, startDayOfWeek, startTime, SimpleTimeZone.WALL_TIME, endMonth, endDay, endDayOfWeek, endTime,
-      SimpleTimeZone.WALL_TIME, dstSavings);
+    this(newRawOffset, ID, newStartMonth, newStartDay, newStartDayOfWeek, newStartTime, SimpleTimeZone.WALL_TIME,
+      newEndMonth, newEndDay, newEndDayOfWeek, newEndTime, SimpleTimeZone.WALL_TIME, newDstSavings);
   }
 
   public SimpleTimeZone(
-    final int rawOffset, final String ID, final int startMonth, final int startDay, final int startDayOfWeek, final int startTime,
-    final int startTimeMode, final int endMonth, final int endDay, final int endDayOfWeek, final int endTime, final int endTimeMode,
-    final int dstSavings
+    final int newRawOffset, final String ID, final int newStartMonth, final int newStartDay,
+    final int newStartDayOfWeek, final int newStartTime, final int newStartTimeMode,
+    final int newEndMonth1, final int newEndDay, final int newEndDayOfWeek, final int newEndTime,
+    final int newEndTimeMode, final int newDstSavings
     ) {
-	System.out.println("SimpleTimeZone("+rawOffset+","+ID+",lots)");
-    if (startTimeMode < WALL_TIME || startTimeMode > UTC_TIME || endTimeMode < WALL_TIME || endTimeMode > UTC_TIME)
+    if (newStartTimeMode < WALL_TIME || newStartTimeMode > UTC_TIME || newEndTimeMode < WALL_TIME
+      || newEndTimeMode > UTC_TIME)
       throw new IllegalArgumentException("Invalid time mode");
 
-
-    setRawOffset(rawOffset);
+    setRawOffset(newRawOffset);
     setID(ID);
-    setStartRule(startMonth, startDay, startDayOfWeek, startTime);
-    this.startTimeMode = startTimeMode;
-    setEndRule(endMonth, endDay, endDayOfWeek, endTime);
-    this.endTimeMode = endTimeMode;
-    setDSTSavings(dstSavings);
+    setStartRule(newStartMonth, newStartDay, newStartDayOfWeek, newStartTime);
+    startTimeMode = newStartTimeMode;
+    setEndRule(newEndMonth1, newEndDay, newEndDayOfWeek, newEndTime);
+    endTimeMode = newEndTimeMode;
+    setDSTSavings(newDstSavings);
+  }
+
+  @Override
+  protected Object clone() {
+    System.out.println("clone()");
+    return new SimpleTimeZone(getRawOffset(), getID(), startMonth, startDay, startDayOfWeek,
+      startTime, endMonth, endDay, endDayOfWeek, endTime);
   }
 
   @Override
@@ -73,7 +78,14 @@ public class SimpleTimeZone extends TimeZone {
   }
 
   @Override
-  public int getOffset(final int era, final int year, final int month, final int day, final int dayOfWeek, final int milliseconds) {
+  public int getOffset(
+    final int era,
+    final int year,
+    final int month,
+    final int day,
+    final int dayOfWeek,
+    final int milliseconds
+    ) {
     // FIXME
     return getRawOffset();
   }
@@ -89,38 +101,51 @@ public class SimpleTimeZone extends TimeZone {
     check.setTime(date);
 
     final Calendar start = Calendar.getInstance(this);
-    // TODO populate start based on date
+    start.set(check.get(Calendar.YEAR), startMonth, startDay, startTime, 0, 0);
+    // FIXME populate start based on date should use startMode
 
     final Calendar end = Calendar.getInstance(this);
-    // TODO populate end based on date
+    end.set(check.get(Calendar.YEAR), endMonth, endDay, endTime, 0, 0);
+    // FIXME populate end based on date should use endMode
 
     if (start.before(check) && end.after(check))
       return true;
     return false;
   }
 
-  public void setDSTSavings(final int dstSavings) {
-    this.dstSavings = dstSavings;
+  public void setDSTSavings(final int newDstSavings) {
+    dstSavings = newDstSavings;
   }
 
-  public void setEndRule(final int endMonth, final int endDay, final int endTime) {
-    setEndRule(endMonth, endDay, 0, endTime);
+  public void setEndRule(final int newEndMonth, final int newEndDay, final int newEndTime) {
+    setEndRule(newEndMonth, newEndDay, 0, newEndTime);
   }
 
-  public void setEndRule(final int endMonth, final int endDay, final int endDayOfWeek, final int endTime) {
-    if (endMonth < Calendar.JANUARY || endMonth > Calendar.DECEMBER)
+  public void setEndRule(
+    final int newEndMonth,
+    final int newEndDay,
+    final int newEndDayOfWeek,
+    final int newEndTime
+    ) {
+    if (newEndMonth < Calendar.JANUARY || newEndMonth > Calendar.DECEMBER)
       throw new IllegalArgumentException("Invalid month");
-    if (endDayOfWeek != 0 && (endDayOfWeek < -Calendar.SUNDAY || endDayOfWeek > -Calendar.SATURDAY)
-      && (endDayOfWeek < -Calendar.SUNDAY || endDayOfWeek > -Calendar.SATURDAY))
+    if (newEndDayOfWeek != 0 && (newEndDayOfWeek < -Calendar.SUNDAY || newEndDayOfWeek > -Calendar.SATURDAY)
+      && (newEndDayOfWeek < -Calendar.SUNDAY || newEndDayOfWeek > -Calendar.SATURDAY))
       throw new IllegalArgumentException("Invalid day of week");
-    this.endMonth = endMonth;
-    this.endDay = endDay;
-    this.endDayOfWeek = endDayOfWeek;
-    this.endTime = endTime;
+    endMonth = newEndMonth;
+    endDay = newEndDay;
+    endDayOfWeek = newEndDayOfWeek;
+    endTime = newEndTime;
     endTimeMode = WALL_TIME;
   }
 
-  public void setEndRule(final int endMonth, final int endDay, final int endDayOfWeek, final int endTime, final boolean after) {
+  public void setEndRule(
+    final int newEndMonth,
+    final int newEndDay,
+    final int newEndDayOfWeek,
+    final int newEndTime,
+    final boolean after
+    ) {
     // TODO
   }
 
@@ -129,36 +154,41 @@ public class SimpleTimeZone extends TimeZone {
     rawOffset = offsetMillis;
   }
 
-  public void setStartRule(final int startMonth, final int startDay, final int startTime) {
-    setStartRule(startMonth, startDay, 0, startTime);
+  public void setStartRule(final int newStartMonth, final int newStartDay, final int newStartTime) {
+    setStartRule(newStartMonth, newStartDay, 0, newStartTime);
   }
 
-  public void setStartRule(final int startMonth, final int startDay, final int startDayOfWeek, final int startTime) {
-    if (startMonth < Calendar.JANUARY || startMonth > Calendar.DECEMBER)
+  public void setStartRule(
+    final int newStartMonth,
+    final int newStartDay,
+    final int newStartDayOfWeek,
+    final int newStartTime
+    ) {
+    if (newStartMonth < Calendar.JANUARY || newStartMonth > Calendar.DECEMBER)
       throw new IllegalArgumentException("Invalid month");
-    if (startDayOfWeek != 0 && (startDayOfWeek < -Calendar.SUNDAY || startDayOfWeek > -Calendar.SATURDAY)
-      && (startDayOfWeek < -Calendar.SUNDAY || startDayOfWeek > -Calendar.SATURDAY))
+    if (newStartDayOfWeek != 0
+      && (newStartDayOfWeek < -Calendar.SUNDAY || newStartDayOfWeek > -Calendar.SATURDAY)
+      && (newStartDayOfWeek < -Calendar.SUNDAY || newStartDayOfWeek > -Calendar.SATURDAY))
       throw new IllegalArgumentException("Invalid day of week");
-    this.startMonth = startMonth;
-    this.startDay = startDay;
-    this.startDayOfWeek = startDayOfWeek;
-    this.startTime = startTime;
+    startMonth = newStartMonth;
+    startDay = newStartDay;
+    startDayOfWeek = newStartDayOfWeek;
+    startTime = newStartTime;
     startTimeMode = WALL_TIME;
   }
 
-  public void setStartRule(final int startMonth, final int startDay, final int startDayOfWeek, final int startTime, final boolean after) {
+  public void setStartRule(
+    final int newStartMonth,
+    final int newStartDay,
+    final int newStartDayOfWeek,
+    final int newStartTime,
+    final boolean after
+    ) {
     // TODO
   }
 
   @Override
   public boolean useDaylightTime() {
     return getDSTSavings() != 0;
-  }
-
-  @Override
-  protected Object clone() {
-	  System.out.println("clone()");
-    return new SimpleTimeZone(getRawOffset(), getID(), startMonth, startDay, startDayOfWeek, startTime, endMonth, endDay, endDayOfWeek,
-      endTime);
   }
 }

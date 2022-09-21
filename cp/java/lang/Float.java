@@ -31,7 +31,7 @@ public final class Float extends Number implements Comparable<Float> {
     SIZE = 32;
   }
 
-  public static String toString(final long a) {
+  public static String toString(final float b) {
     return "<float>";
   }
 

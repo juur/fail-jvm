@@ -9,10 +9,10 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V> {
 
     private VV value;
 
-    public ImplEntry(final KK key, final VV value, final ImplEntry<KK, VV> next) {
-      this.key = key;
-      this.value = value;
-      this.next = next;
+    public ImplEntry(final KK newKey, final VV newValue, final ImplEntry<KK, VV> newNext) {
+      key = newKey;
+      value = newValue;
+      next = newNext;
     }
 
     @Override
@@ -26,9 +26,9 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V> {
     }
 
     @Override
-    public VV setValue(final VV value) {
-      this.value = value;
-      return this.value;
+    public VV setValue(final VV newValue) {
+      value = newValue;
+      return value;
     }
   }
 

@@ -8,8 +8,8 @@ public class ROByteBuffer extends ByteBuffer {
     super(size, true, 0, new byte[size]);
   }
 
-  ROByteBuffer(final byte[] buffer) {
-    super(buffer.length, true, 0, buffer);
+  ROByteBuffer(final byte[] newBuffer) {
+    super(newBuffer.length, true, 0, newBuffer);
   }
 
   @Override

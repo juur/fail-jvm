@@ -19,8 +19,17 @@ public final class Long extends Number implements Comparable<Long> {
     SIZE = 64;
   }
 
+  public static long parseLong(final String str)
+  {
+    return parseLong(str, 10);
+  }
+
+  public static long parseLong(final String string, final int radix) throws NumberFormatException {
+    return Number.atoi(string.toCharArray(), radix, Long.MAX_VALUE, Long.MIN_VALUE);
+  }
+
   public static String toString(final long a) {
-    return new String(Integer.itoa(a, 10));
+    return new String(java.lang.Number.itoa(a, 10));
   }
 
   public static Long valueOf(final long i) {
@@ -56,5 +65,10 @@ public final class Long extends Number implements Comparable<Long> {
   @Override
   public long longValue() {
     return value;
+  }
+
+  @Override
+  public java.lang.String toString() {
+    return new String(Number.itoa(value, 10));
   }
 }

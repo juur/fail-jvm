@@ -12,10 +12,10 @@ public abstract class CharsetDecoder {
   private String            replacement;
   private CodingErrorAction unmappableCharacterAction;
 
-  protected CharsetDecoder(final Charset cs, final float averageCharsPerByte, final float maxCharsPerByte) {
-    this.cs = cs;
-    this.averageCharsPerByte = averageCharsPerByte;
-    this.maxCharsPerByte = maxCharsPerByte;
+  protected CharsetDecoder(final Charset newCharset, final float newAverageCharsPerByte, final float newMaxCharsPerByte) {
+    this.cs = newCharset;
+    this.averageCharsPerByte = newAverageCharsPerByte;
+    this.maxCharsPerByte = newMaxCharsPerByte;
     replacement = "\uFFFD";
   }
 

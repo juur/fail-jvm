@@ -12,10 +12,11 @@ public class Thread implements Runnable {
   }
 
   public static final int MAX_PRIORITY = 10;
-
   public static final int MIN_PRIORITY  = 1;
   public static final int NORM_PRIORITY = 5;
-  private static int      threadCount   = 0;
+
+  volatile private static int threadCount = 0;
+  private static final Object threadCountLock = new Object();
 
   public static native Thread currentThread();
 
@@ -34,35 +35,35 @@ public class Thread implements Runnable {
     this(null, null, "Thread" + threadCount++);
   }
 
-  public Thread(final Runnable target) {
-    this(null, target, "Thread" + threadCount++);
+  public Thread(final Runnable newTarget) {
+    this(null, newTarget, "Thread" + threadCount++);
   }
 
-  public Thread(final Runnable target, final String name) {
-    this(null, target, name);
+  public Thread(final Runnable newTarget, final String newName) {
+    this(null, newTarget, newName);
   }
 
-  public Thread(final String name) {
-    this(null, null, name);
+  public Thread(final String newName) {
+    this(null, null, newName);
   }
 
-  public Thread(final ThreadGroup group, final Runnable target) {
-    this(group, target, "Thread" + threadCount++);
+  public Thread(final ThreadGroup newGroup, final Runnable newTarget) {
+    this(newGroup, newTarget, "Thread" + threadCount++);
   }
 
-  public Thread(final ThreadGroup group, final Runnable target, final String name) {
-    this.name = name;
-    this.target = target;
-    this.group = group;
+  public Thread(final ThreadGroup newGroup, final Runnable newTarget, final String newName) {
+    name = newName;
+    target = newTarget;
+    group = newGroup;
     // state = State.NEW;
   }
 
-  public Thread(final ThreadGroup group, final Runnable target, final String name, final long stackSize) {
-    this(group, null, "Thread" + threadCount++);
+  public Thread(final ThreadGroup newGroup, final Runnable newTarget, final String newName, final long stackSize) {
+    this(newGroup, null, "Thread" + threadCount++);
   }
 
-  public Thread(final ThreadGroup group, final String name) {
-    this(group, null, "Thread" + threadCount++);
+  public Thread(final ThreadGroup newGroup, final String newName) {
+    this(newGroup, null, "Thread" + threadCount++);
   }
 
   public String getName() {
@@ -72,6 +73,8 @@ public class Thread implements Runnable {
   // public State getState() {
   // return state;
   // }
+
+  private native void nativeStart();
 
   @Override
   public void run() {
@@ -87,6 +90,4 @@ public class Thread implements Runnable {
       group.add(this);
     nativeStart();
   }
-
-  private native void nativeStart();
 }

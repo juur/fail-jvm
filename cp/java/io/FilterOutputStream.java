@@ -4,8 +4,8 @@ public class FilterOutputStream extends OutputStream {
 
   protected OutputStream out;
 
-  public FilterOutputStream(final OutputStream out) {
-    this.out = out;
+  public FilterOutputStream(final OutputStream newOut) {
+    out = newOut;
   }
 
   @Override

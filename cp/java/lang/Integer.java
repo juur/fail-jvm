@@ -17,44 +17,24 @@ public final class Integer extends Number implements Comparable<Integer> {
     SIZE = 32;
   }
 
+  public static int parseInt(final String str) {
+    return parseInt(str, 10);
+  }
+
+  public static int parseInt(final String str, final int radix) {
+    return (int) Number.atoi(str.toCharArray(), radix, MAX_VALUE, MIN_VALUE);
+  }
+
+  public static int reverseBytes(final int i) {
+    return i&0xff000000>>24|i&0xff0000>>8|i&0xff00<<8|i&0xff<<24;
+  }
+
   public static String toString(final int val) {
-    return new String(itoa(val, 10));
+    return new String(Number.itoa(val, 10));
   }
 
   public static Integer valueOf(final int val) {
     return new Integer(val);
-  }
-
-  protected static char[] itoa(final long value, final int radix) {
-    final char[] tmp = new char[32];
-    final char[] ret = new char[tmp.length];
-
-    int  tp = 0, sp = 0;
-    long i  = 0, v = 0;
-
-    final boolean sign = radix == 10 && value < 0;
-
-    if (sign)
-      v = -value;
-    else
-      v = value;
-
-    while (v > 0 || tp == 0) {
-      i = v % radix;
-      v /= radix;
-      if (i < 10)
-        tmp[tp++] = (char) (i + 48);
-      else
-        tmp[tp++] = (char) (i + 97 - 10);
-    }
-
-    if (sign)
-      ret[sp++] = '-';
-
-    while (tp > 0)
-      ret[sp++] = tmp[--tp];
-
-    return ret;
   }
 
   private final int value;
@@ -82,6 +62,7 @@ public final class Integer extends Number implements Comparable<Integer> {
   public int intValue() {
     return value;
   }
+
 
   @Override
   public long longValue() {

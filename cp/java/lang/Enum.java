@@ -12,15 +12,23 @@ public abstract class Enum<E extends Enum<E>> implements Comparable<E> {
 
   private final int ordinal;
 
-  protected Enum(final String name, final int ordinal) {
-    this.name = name;
-    this.ordinal = ordinal;
+  protected Enum(final String newName, final int newOrdinal) {
+    name = newName;
+    ordinal = newOrdinal;
+  }
+
+  @Override
+  protected final Object clone() throws CloneNotSupportedException {
+    throw new CloneNotSupportedException();
   }
 
   @Override
   public final int compareTo(final E o) {
     return ordinal() - o.ordinal();
   }
+
+  @Override
+  protected final void finalize() {}
 
   public final Class<E> getDeclaringClass() {
     return null;
@@ -38,13 +46,5 @@ public abstract class Enum<E extends Enum<E>> implements Comparable<E> {
   public String toString() {
     return name;
   }
-
-  @Override
-  protected final Object clone() throws CloneNotSupportedException {
-    throw new CloneNotSupportedException();
-  }
-
-  @Override
-  protected final void finalize() {}
 
 }

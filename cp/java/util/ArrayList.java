@@ -1,6 +1,10 @@
 package java.util;
 
-public class ArrayList<E> extends AbstractList<E> implements RandomAccess {
+import java.io.Serializable;
+
+public class ArrayList<E> extends AbstractList<E> implements RandomAccess, Cloneable, Serializable {
+
+  private static final long serialVersionUID = 1L;
 
   private static class ListIteratorImpl<E> implements ListIterator<E> {
 
@@ -29,22 +33,26 @@ public class ArrayList<E> extends AbstractList<E> implements RandomAccess {
 
     @Override
     public E next() {
-      return list.get(ptr++);
+      if (ptr < list.size())
+        return list.get(ptr++);
+      throw new NoSuchElementException();
     }
 
     @Override
     public int nextIndex() {
-      return ptr + 1;
+      return Math.min(ptr + 1, list.size());
     }
 
     @Override
     public E previous() {
-      return list.get(--ptr);
+      if (ptr > 0)
+        return list.get(--ptr);
+      throw new NoSuchElementException();
     }
 
     @Override
     public int previousIndex() {
-      return ptr - 1;
+      return Math.max(0, ptr - 1);
     }
 
     @Override
@@ -71,9 +79,9 @@ public class ArrayList<E> extends AbstractList<E> implements RandomAccess {
     last = 0;
   }
 
-  public ArrayList(final Object[] array) {
-    this.array = array;
-    this.last = array.length - 1;
+  public ArrayList(final Object[] newArray) {
+    this.array = newArray;
+    this.last = newArray.length - 1;
   }
 
   @Override
@@ -81,13 +89,14 @@ public class ArrayList<E> extends AbstractList<E> implements RandomAccess {
     if (last >= array.length)
       array = Arrays.copyOf(array, array.length * 2);
     array[last++] = e;
+    modCount++;
     return true;
   }
 
   @SuppressWarnings("unchecked")
   @Override
   public E get(final int index) {
-    if (index < 0 || index > size())
+    if (index < 0 || index >= size())
       throw new IndexOutOfBoundsException();
     return (E) array[index];
   }
@@ -99,20 +108,45 @@ public class ArrayList<E> extends AbstractList<E> implements RandomAccess {
 
   @Override
   public E set(final int index, final E element) {
-    if (index < 0 || index > size())
+    if (index < 0 || index >= size())
       throw new IndexOutOfBoundsException();
     array[index] = element;
+    modCount++;
     return element;
   }
 
   @Override
   public int size() {
-    return array.length;
+    return last + 1;
   }
 
   @Override
-  public List<E> subList(final int fromIndex, final int toIndex) {
-    return null;
+  public boolean remove(Object o) {
+    int safe = modCount;
+    int idx  = indexOf(o);
+    if (idx == -1)
+      return false;
+    
+    if (safe != modCount)
+      throw new ConcurrentModificationException();
+    
+    return remove(idx) != null;
   }
 
+  @SuppressWarnings("unchecked")
+  @Override
+  public <T> T[] toArray(final T[] a) {
+    if (a == null)
+      throw new NullPointerException();
+
+    final T[] ret = a.length < size() ? Arrays.copyOf(a, size()) : a;
+
+    for (int i = 0; i < size(); i++)
+      try {
+        a[i] = (T) get(i);
+      } catch (final ClassCastException e) {
+        throw new ArrayStoreException();
+      }
+    return ret;
+  }
 }

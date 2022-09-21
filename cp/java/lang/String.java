@@ -6,12 +6,28 @@ import java.nio.charset.Charset;
 
 public final class String implements CharSequence, Comparable<String> {
 
+  public static String valueOf(final boolean b) {
+    return Boolean.toString(b);
+  }
+
+  public static String valueOf(final double b) {
+    return Double.toString(b);
+  }
+
+  public static String valueOf(final float b) {
+    return Float.toString(b);
+  }
+
   public static String valueOf(final int a) {
     return Integer.toString(a);
   }
 
-  static String valueOf(final boolean b) {
-    return Boolean.toString(b);
+  public static String valueOf(final long b) {
+    return Long.toString(b);
+  }
+
+  public static String valueOf(final Object o) {
+    return o.toString();
   }
 
   private final char[] string;
@@ -97,11 +113,12 @@ public final class String implements CharSequence, Comparable<String> {
     return string.length;
   }
 
-  public boolean startsWith(final String string) {
-    return startsWith(string, string.length());
+  public boolean startsWith(final String testString) {
+    return startsWith(testString, testString.length());
   }
 
-  public boolean startsWith(final String other, int length) {
+  public boolean startsWith(final String other, final int len) {
+    int length = len;
     if (length > other.length())
       length = other.length();
     if (length == 0)
@@ -117,7 +134,20 @@ public final class String implements CharSequence, Comparable<String> {
 
   @Override
   public CharSequence subSequence(final int start, final int end) {
-    return null;
+    return substring(start, end);
+  }
+
+  public String substring(final int start)
+  {
+    return substring(start, length());
+  }
+
+  public String substring(final int start, final int end) {
+    char[] ret = new char[end-start];
+    int i = 0;
+    for (int j = start; j < end; j++)
+      ret[i++] = string[j];
+    return new String(ret);
   }
 
   public char[] toCharArray() {

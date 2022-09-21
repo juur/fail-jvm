@@ -11,9 +11,9 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
     map = new HashSet<Map.Entry<K, V>>();
   }
 
-  public TreeMap(final Comparator<? super K> comparator) {
+  public TreeMap(final Comparator<? super K> newComparator) {
     this();
-    this.comparator = comparator;
+    this.comparator = newComparator;
   }
 
   public TreeMap(final Map<? extends K, ? extends V> m) {

@@ -1,11 +1,5 @@
 package java.util;
 
-import java.util.TimeZone;
-import java.util.Locale;
-import java.util.Date;
-import java.util.GregorianCalendar;
-import java.util.Map;
-
 public abstract class Calendar {
 
   public static final int ALL_STYLES           = 0;
@@ -70,26 +64,23 @@ public abstract class Calendar {
   }
 
   public static Calendar getInstance(final TimeZone zone, final Locale aLocale) {
-	  System.out.println("Requesting GregorianCalendar("+zone.toString()+","+aLocale.toString()+")");
+    System.out
+    .println("Requesting GregorianCalendar(" + zone.toString() + "," + aLocale.toString() + ")");
     return new GregorianCalendar(zone, aLocale);
   }
 
-  private int           firstDOW;
-  private final boolean lenient;
+  private int      firstDOW;
+  private boolean  lenient;
   @SuppressWarnings("unused")
-  private Locale        locale;
-  private int           minDaysInFirstWeek;
-  private TimeZone      zone;
+  private Locale   locale;
+  private int      minDaysInFirstWeek;
+  private TimeZone zone;
 
   protected boolean[] areFieldsSet;
-
-  protected int[] fields;
-
+  protected int[]     fields;
   protected boolean[] isSet;
-
-  protected boolean isTimeSet;
-
-  protected long time;
+  protected boolean   isTimeSet;
+  protected long      time;
 
   protected Calendar() {
     super();
@@ -105,9 +96,9 @@ public abstract class Calendar {
     computeFields();
   }
 
-  protected Calendar(final TimeZone zone, final Locale aLocale) {
+  protected Calendar(final TimeZone newZone, final Locale aLocale) {
     this();
-    setTimeZone(zone);
+    setTimeZone(newZone);
     locale = aLocale;
     computeFields();
   }
@@ -147,15 +138,22 @@ public abstract class Calendar {
     areFieldsSet[field] = false;
   }
 
+  protected void complete() {
+    // TODO
+  }
+
+  protected abstract void computeFields();
+
+  protected abstract void computeTime();
+
   public int get(final int field) {
     if (field < 0 || field >= FIELD_COUNT)
       throw new ArrayIndexOutOfBoundsException();
     final int val = internalGet(field);
     if (isLenient()) {
       return val;
-    } else {
-      return val;
     }
+    return val;
   }
 
   public int getActualMaximum(final int field) {
@@ -172,11 +170,15 @@ public abstract class Calendar {
     return 0;
   }
 
-  public String getDisplayName(final int field, final int style, final Locale locale) {
+  public String getDisplayName(final int field, final int style, final Locale aLocale) {
     return "Blah";
   }
 
-  public Map<String, Integer> getDisplayNames(final int field, final int style, final Locale locale) {
+  public Map<String, Integer> getDisplayNames(
+    final int field,
+    final int style,
+    final Locale aLocale
+    ) {
     return null;
   }
 
@@ -206,6 +208,10 @@ public abstract class Calendar {
 
   public TimeZone getTimeZone() {
     return zone;
+  }
+
+  protected int internalGet(final int field) {
+    return fields[field];
   }
 
   public boolean isLenient() {
@@ -238,13 +244,26 @@ public abstract class Calendar {
     set(DAY_OF_MONTH, date);
   }
 
-  public void set(final int year, final int month, final int date, final int hourOfDay, final int minute) {
+  public void set(
+    final int year,
+    final int month,
+    final int date,
+    final int hourOfDay,
+    final int minute
+    ) {
     set(year, month, date);
     set(HOUR_OF_DAY, hourOfDay);
     set(MINUTE, minute);
   }
 
-  public void set(final int year, final int month, final int date, final int hourOfDay, final int minute, final int second) {
+  public void set(
+    final int year,
+    final int month,
+    final int date,
+    final int hourOfDay,
+    final int minute,
+    final int second
+    ) {
     set(year, month, date, hourOfDay, minute);
     set(SECOND, second);
   }
@@ -253,7 +272,7 @@ public abstract class Calendar {
     firstDOW = value;
   }
 
-  public void setLenient(boolean lenient) {
+  public void setLenient(final boolean newLenient) {
     lenient = true;
   }
 
@@ -279,17 +298,5 @@ public abstract class Calendar {
   @Override
   public String toString() {
     return (getTimeZone() == null ? "(null TZ)" : getTimeZone()) + "," + getTimeInMillis();
-  }
-
-  protected void complete() {
-    // TODO
-  }
-
-  protected abstract void computeFields();
-
-  protected abstract void computeTime();
-
-  protected int internalGet(final int field) {
-    return fields[field];
   }
 }

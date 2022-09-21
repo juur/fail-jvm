@@ -7,28 +7,41 @@ public final class FileDescriptor {
   public final static FileDescriptor out;
 
   static {
-    err = new FileDescriptor(2);
     in = new FileDescriptor(0);
     out = new FileDescriptor(1);
+    err = new FileDescriptor(2);
   }
 
-  private final int fd;
+  private int  fd = -1;
+  private File file;
 
-  public FileDescriptor() {
-    this(-1);
+  FileDescriptor(final File newFile) {
+    file = newFile;
   }
 
-  private FileDescriptor(final int i) {
+  FileDescriptor(final int i) {
     fd = i;
   }
 
-  FileDescriptor(final File file) throws IOException {
-    if (file.canWrite())
-      fd = file.getFD();
-    throw new IOException();
+  void close() throws IOException {
+    if (fd == -1)
+      throw new RuntimeException();
+    sysClose(fd);
+    fd = -1;
+  }
+
+  void open(final boolean b) throws FileNotFoundException, IOException {
+    if (file == null || fd != -1)
+      throw new RuntimeException();
+    fd = sysOpen(file.toString(), b);
   }
 
   public native void sync() throws SyncFailedException;
+
+  private native void sysClose(int fdesc) throws IOException;
+
+  private native int sysOpen(String path, boolean isWrite)
+    throws IOException, FileNotFoundException;
 
   public native boolean valid();
 }

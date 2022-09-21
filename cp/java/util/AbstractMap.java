@@ -7,9 +7,9 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     private final K key;
     private V       value;
 
-    public SimpleEntry(final K key, final V value) {
-      this.key = key;
-      this.value = value;
+    public SimpleEntry(final K newKey, final V newValue) {
+      this.key = newKey;
+      this.value = newValue;
     }
 
     public SimpleEntry(final Map.Entry<? extends K, ? extends V> entry) {
@@ -28,9 +28,9 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     }
 
     @Override
-    public V setValue(final V value) {
-      this.value = value;
-      return value;
+    public V setValue(final V newValue) {
+      this.value = newValue;
+      return newValue;
     }
 
   }
@@ -40,9 +40,9 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     private final K key;
     private final V value;
 
-    public SimpleImmutableEntry(final K key, final V value) {
-      this.key = key;
-      this.value = value;
+    public SimpleImmutableEntry(final K newKey, final V newValue) {
+      this.key = newKey;
+      this.value = newValue;
     }
 
     public SimpleImmutableEntry(final Map.Entry<? extends K, ? extends V> entry) {
@@ -61,7 +61,7 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     }
 
     @Override
-    public V setValue(final V value) {
+    public V setValue(final V newValue) {
       throw new UnsupportedOperationException();
     }
 

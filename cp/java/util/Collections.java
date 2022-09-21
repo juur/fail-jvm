@@ -113,6 +113,16 @@ public class Collections {
     }
 
     @Override
+    public boolean addAll(final Collection<? extends T> c) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean addAll(final int index, final Collection<? extends T> c) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public T get(final int index) {
       return list.get(index);
     }
@@ -280,11 +290,32 @@ public class Collections {
 
   }
 
+  public static List<?>   EMPTY_LIST = new ImmutableList<Object>(new ArrayList<Object>(0));
+  public static Set<?>    EMPTY_SET  = new ImmutableSet<Object>(new HashSet<Object>());
+  public static Map<?, ?> EMPTY_MAP  = new ImmutableMap<Object, Object>(new HashMap<Object, Object>());
+
+  @SafeVarargs
+  public static <T> boolean addAll(final Collection<? super T> c, final T... elements) {
+    return c.addAll(Arrays.asList(elements));
+  }
+
   public static <T> ArrayList<T> list(final Enumeration<T> e) {
     final ArrayList<T> ret = new ArrayList<T>();
     while (e.hasMoreElements())
       ret.add(e.nextElement());
     return ret;
+  }
+
+  public static <T> Set<T> singleton(final T o) {
+    final Set<T> set = new HashSet<T>();
+    set.add(o);
+    return new ImmutableSet<T>(set);
+  }
+
+  public static <T> List<T> singletonList(final T o) {
+    final List<T> list = new ArrayList<T>();
+    list.add(o);
+    return new ImmutableList<T>(list);
   }
 
   public static <T> Collection<T> unmodifiableCollection(final Collection<? extends T> collection) {

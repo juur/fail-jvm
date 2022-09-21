@@ -8,11 +8,11 @@ public class StackTraceElement {
   final private int     lineNumber;
   final private String  methodName;
 
-  public StackTraceElement(final String declaringClass, final String methodName, final String fileName, final int lineNumber) {
-    this.declaringClass = declaringClass;
-    this.methodName = methodName;
-    this.fileName = fileName;
-    this.lineNumber = lineNumber;
+  public StackTraceElement(final String newDeclaringClass, final String newMethodName, final String newFileName, final int newLineNumber) {
+    this.declaringClass = newDeclaringClass;
+    this.methodName = newMethodName;
+    this.fileName = newFileName;
+    this.lineNumber = newLineNumber;
     isNative = false;
   }
 

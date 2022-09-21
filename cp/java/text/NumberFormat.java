@@ -135,8 +135,8 @@ public abstract class NumberFormat extends Format {
 
   public abstract Number parse(String source, ParsePosition parsePosition);
 
-  public void setCurrency(final Currency currency) {
-    this.currency = currency;
+  public void setCurrency(final Currency newCurrency) {
+    this.currency = newCurrency;
   }
 
   public void setGroupingUsed(final boolean newValue) {
@@ -163,7 +163,7 @@ public abstract class NumberFormat extends Format {
     parseIntegerOnly = value;
   }
 
-  public void setRoundingMode(final RoundingMode roundingMode) {
-    this.roundingMode = roundingMode;
+  public void setRoundingMode(final RoundingMode newRoundingMode) {
+    this.roundingMode = newRoundingMode;
   }
 }

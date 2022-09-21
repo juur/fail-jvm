@@ -19,8 +19,7 @@ public final class Boolean implements Comparable<Boolean> {
   public static boolean parseBoolean(final String s) {
     if (s != null && s.equalsIgnoreCase(s))
       return true;
-    else
-      return false;
+    return false;
   }
 
   public static String toString(final boolean b) {
@@ -33,8 +32,8 @@ public final class Boolean implements Comparable<Boolean> {
 
   private final boolean value;
 
-  public Boolean(final boolean value) {
-    this.value = value;
+  public Boolean(final boolean newValue) {
+    value = newValue;
   }
 
   public Boolean(final String s) {

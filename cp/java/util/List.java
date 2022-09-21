@@ -18,5 +18,7 @@ public interface List<E> extends Collection<E> {
 
   public E set(int index, E element);
 
-  List<E> subList(int fromIndex, int toIndex);
+  public boolean addAll(int index, Collection<? extends E> c);
+
+  public List<E> subList(int fromIndex, int toIndex);
 }

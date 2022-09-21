@@ -4,8 +4,8 @@ public class ParsePosition {
 
   private int index, errIndex = -1;
 
-  public ParsePosition(final int index) {
-    this.index = index;
+  public ParsePosition(final int newIndex) {
+    this.index = newIndex;
   }
 
   public int getErrorIndex() {
@@ -20,7 +20,7 @@ public class ParsePosition {
     errIndex = ei;
   }
 
-  public void setIndex(final int index) {
-    this.index = index;
+  public void setIndex(final int newIndex) {
+    this.index = newIndex;
   }
 }

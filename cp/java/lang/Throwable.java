@@ -12,19 +12,19 @@ public class Throwable {
     this(null, null);
   }
 
-  public Throwable(final String message) {
-    this(message, null);
+  public Throwable(final String newMessage) {
+    this(newMessage, null);
   }
 
-  public Throwable(final String message, final Throwable cause) {
-    this.message = message;
-    this.cause = cause;
+  public Throwable(final String newMessage, final Throwable newCause) {
+    this.message = newMessage;
+    this.cause = newCause;
     stackTrace = new StackTraceElement[0];
     // fillInStackTrace();
   }
 
-  public Throwable(final Throwable cause) {
-    this(cause == null ? null : cause.toString(), cause);
+  public Throwable(final Throwable newCause) {
+    this(newCause == null ? null : newCause.toString(), newCause);
   }
 
   public native Throwable fillInStackTrace();
@@ -69,10 +69,10 @@ public class Throwable {
     }
   }
 
-  public void setStackTrace(final StackTraceElement[] stackTrace) {
-    if (stackTrace == null)
+  public void setStackTrace(final StackTraceElement[] newStackTrace) {
+    if (newStackTrace == null)
       throw new NullPointerException();
-    this.stackTrace = stackTrace;
+    this.stackTrace = newStackTrace;
   }
 
   @Override

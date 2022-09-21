@@ -3,6 +3,7 @@ package java.util;
 public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V> {
 
   private Set<K> keySet;
+  @SuppressWarnings("unused")
   private ArrayList<V> list;
 
   public EnumMap(final Class<K> keyType) {

@@ -1,6 +1,5 @@
 package spod;
 
-import java.util.Calendar;
 import java.util.SimpleTimeZone;
 import java.util.TimeZone;
 
@@ -29,8 +28,9 @@ public abstract class TimeZones extends SimpleTimeZone {
       final TimeZone[] zones = new SimpleTimeZone[] {
         new SimpleTimeZone(0, "UTC"),
         new SimpleTimeZone(0, "GMT"),
-        //new SimpleTimeZone(0, "Europe/London", Calendar.MARCH, -1, Calendar.SUNDAY, 3600000, Calendar.OCTOBER, -1, Calendar.SUNDAY, 3600000) 
-	  };
+        // new SimpleTimeZone(0, "Europe/London", Calendar.MARCH, -1, Calendar.SUNDAY,
+        // 3600000, Calendar.OCTOBER, -1, Calendar.SUNDAY, 3600000)
+      };
       timeZones = zones;
     }
     return timeZones;

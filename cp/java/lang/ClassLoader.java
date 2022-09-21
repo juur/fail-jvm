@@ -5,7 +5,7 @@ public abstract class ClassLoader {
   final static private ClassLoader systemClassLoader;
 
   static {
-	  systemClassLoader = new spod.ClassLoader();
+    systemClassLoader = new spod.ClassLoader();
   }
 
   public static ClassLoader getSystemClassLoader() {
@@ -18,12 +18,12 @@ public abstract class ClassLoader {
     this(getSystemClassLoader());
   }
 
-  protected ClassLoader(final ClassLoader parent) {
-    this.parent = parent;
+  protected ClassLoader(final ClassLoader newParent) {
+    parent = newParent;
   }
 
-  public ClassLoader getParent() {
-    return parent;
+  void clearAssertionStatus() {
+    // TODO
   }
 
   protected native Class<?> findClass(String name) throws ClassNotFoundException;
@@ -32,8 +32,11 @@ public abstract class ClassLoader {
 
   protected final native Class<?> findLoadedClass(String name);
 
+  public ClassLoader getParent() {
+    return parent;
+  }
+
   protected Class<?> loadClass(final String name) throws ClassNotFoundException {
-    System.out.println("loadClass(" + name + ")");
     return loadClass(name, false);
   }
 
@@ -57,8 +60,4 @@ public abstract class ClassLoader {
   }
 
   protected final native void resolveClass(Class<?> c);
-
-  void clearAssertionStatus() {
-    // TODO
-  }
 }

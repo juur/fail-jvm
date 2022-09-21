@@ -1,6 +1,7 @@
 package java.lang;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.GenericDeclaration;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -92,8 +93,8 @@ public final class Class<T> implements GenericDeclaration, Type, AnnotatedElemen
       } catch (final InvocationTargetException e) {
         return null;
       }
-    } else
-      return enumConstants;
+    }
+    return enumConstants;
   }
 
   public Method getMethod(final String string) {

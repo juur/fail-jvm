@@ -17,6 +17,14 @@ public final class Byte extends Number {
     SIZE = 8;
   }
 
+  public static int parseByte(final String str) {
+    return parseByte(str, 10);
+  }
+
+  public static int parseByte(final String str, final int radix) {
+    return (int) Number.atoi(str.toCharArray(), radix, MAX_VALUE, MIN_VALUE);
+  }
+
   private byte value;
 
   @Override

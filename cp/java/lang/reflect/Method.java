@@ -6,10 +6,10 @@ public class Method extends AccessibleObject implements GenericDeclaration, Memb
   private final int      modifiers;
   private final String   name;
 
-  Method(final Class<?> declaringClass, final int modifiers, final String name) {
-    this.declaringClass = declaringClass;
-    this.modifiers = modifiers;
-    this.name = name;
+  Method(final Class<?> newDeclaringClass, final int newModifiers, final String newName) {
+    this.declaringClass = newDeclaringClass;
+    this.modifiers = newModifiers;
+    this.name = newName;
   }
 
   @Override

@@ -15,8 +15,8 @@ public interface AttributedCharacterIterator extends CharacterIterator {
 
     private final String name;
 
-    public Attribute(final String name) {
-      this.name = name;
+    public Attribute(final String newName) {
+      this.name = newName;
     }
 
     protected String getName() {

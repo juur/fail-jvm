@@ -5,25 +5,25 @@ public class FileOutputStream extends OutputStream {
   private final FileDescriptor fdObj;
   private boolean              isClosed;
 
-  public FileOutputStream(final File file) throws FileNotFoundException {
+  public FileOutputStream(final File file) throws FileNotFoundException, IOException {
     isClosed = false;
-    try {
-      fdObj = new FileDescriptor(file);
-    } catch (final IOException e) {
-      throw new FileNotFoundException();
-    }
+    fdObj = new FileDescriptor(file);
+    fdObj.open(true);
   }
 
-  public FileOutputStream(final FileDescriptor fdObj) {
+  public FileOutputStream(final FileDescriptor fd) {
     isClosed = false;
-    if (fdObj == null)
+    if (fd == null)
       throw new NullPointerException();
-    this.fdObj = fdObj;
+    fdObj = fd;
   }
 
   @Override
   public void close() throws IOException {
+    if (isClosed)
+      return;
     isClosed = true;
+    fdObj.close();
   }
 
   @Override

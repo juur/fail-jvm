@@ -4,7 +4,7 @@ import java.lang.annotation.Annotation;
 
 public class AccessibleObject implements AnnotatedElement {
 
-  private boolean isAccessible;
+  private boolean isAccessible = false;
 
   @Override
   public <T extends Annotation> T getAnnotation(final Class<T> annotationClass) {

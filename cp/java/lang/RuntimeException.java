@@ -10,4 +10,8 @@ public class RuntimeException extends Exception {
     super(message);
   }
 
+  public RuntimeException(java.lang.Throwable cause) {
+    super(cause);
+  }
+
 }

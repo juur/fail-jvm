@@ -29,20 +29,19 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
   private final boolean hasArray;
   protected byte[]      buffer;
 
-  protected ByteBuffer(final int size, final boolean hasArray, final int arrayOffset, final byte[] buffer) {
+  protected ByteBuffer(final int size, final boolean newHasArray, final int newArrayOffset, final byte[] newBuffer) {
     super(size);
     byteOrder = ByteOrder.BIG_ENDIAN;
-    this.hasArray = hasArray;
-    this.arrayOffset = arrayOffset;
-    this.buffer = buffer;
+    hasArray = newHasArray;
+    arrayOffset = newArrayOffset;
+    buffer = newBuffer;
   }
 
   @Override
   public final byte[] array() {
     if (hasArray())
       return buffer;
-    else
-      throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException();
   }
 
   @Override

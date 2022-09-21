@@ -52,8 +52,7 @@ public class ROCharBuffer extends CharBuffer {
       throw new IndexOutOfBoundsException();
     if (hasArray())
       return buffer[index];
-    else
-      return csqBuffer.charAt(index);
+    return csqBuffer.charAt(index);
   }
 
   @Override

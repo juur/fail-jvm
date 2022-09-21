@@ -18,7 +18,6 @@ public final class Locale {
   private static final langCls[] langs;
 
   static {
-	  System.out.println("Locale.clinit");
     countries = new langCls[] { new langCls("GB", "GBR", "United Kingdom") };
     langs = new langCls[] { new langCls("en", "eng", "English") };
     defLocale = new Locale("en", "GB");
@@ -37,18 +36,18 @@ public final class Locale {
 
   private final String variant;
 
-  public Locale(final String language) {
-    this(language, null, null);
+  public Locale(final String newLanguage) {
+    this(newLanguage, null, null);
   }
 
-  public Locale(final String language, final String country) {
-    this(language, country, null);
+  public Locale(final String newLanguage, final String newCountry) {
+    this(newLanguage, newCountry, null);
   }
 
-  public Locale(final String language, final String country, final String variant) {
-    setupLang(language);
-    setupCountry(country);
-    this.variant = variant;
+  public Locale(final String newLanguage, final String newCountry, final String newVariant) {
+    setupLang(newLanguage);
+    setupCountry(newCountry);
+    this.variant = newVariant;
   }
 
   public String getCountry() {

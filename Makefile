@@ -1,5 +1,9 @@
-JAVA_HOME	:=	/usr/lib/jvm/java-1.6.0
-CFLAGS		:=	-std=c99 \
+CC			:=	gcc
+JAVA_HOME	:=	/usr/lib/jvm/java-1.8.0
+CFLAGS		:=	\
+	-std=c99 \
+	-O1 \
+	-no-pie \
 	-ggdb \
 	-Wall \
 	-Wextra \
@@ -8,7 +12,6 @@ CFLAGS		:=	-std=c99 \
 	-Wformat=2 \
 	-fsingle-precision-constant \
 	-Wbad-function-cast \
-	-Wconversion \
 	-Wfloat-equal -Winit-self \
 	-Wjump-misses-init \
 	-Wlogical-op \
@@ -22,7 +25,9 @@ CFLAGS		:=	-std=c99 \
 	-Wstrict-aliasing=3 \
 	-fstrict-aliasing \
 	-Wstrict-overflow=5 \
+	-fstack-protector-all \
 	-fstrict-overflow \
+	-D_FORTIFY_SOURCE=2 \
 	-Wsuggest-attribute=format \
 	-Wswitch-default \
 	-Wsuggest-attribute=pure \
@@ -82,6 +87,9 @@ all:		$(TARGET) $(JCP_CLSS) $(J_CLSS)
 
 %.class: 	%.java
 	$(JAVAC) $(JFLAGS) $<
+
+dist-clean: clean
+	find cp -type f -name "*.class" -exec rm -f {} \;
 
 clean:
 	rm -f $(TARGET) *.o

@@ -1,8 +1,12 @@
 package java.lang;
 
+import java.util.Random;
+
 public final class Math {
 
   public static final double E, PI;
+  private static Object rndObject = new Object();
+  private static Random rnd;
 
   static {
     E = 2.718281828459045;
@@ -58,6 +62,15 @@ public final class Math {
 	  if (a < 0) return -a;
 	  return a;
   }
+  
+  public static double random() {
+    synchronized(rndObject) {
+      if (rnd == null)
+        rnd = new Random();
+      
+      return rnd.nextDouble();
+    }
+  }
 
   public static long abs(long a)
   {
@@ -84,4 +97,8 @@ public final class Math {
   public static native double log(double a);
   public static native double log10(double a);
   public static native double log1p(double x);
+  
+  private Math() {}
+
+  public static native double sqrt(double d);
 }

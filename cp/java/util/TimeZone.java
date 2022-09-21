@@ -95,8 +95,8 @@ public abstract class TimeZone {
 
   public abstract boolean inDaylightTime(Date date);
 
-  public void setID(final String ID) {
-    this.ID = ID;
+  public void setID(final String newID) {
+    this.ID = newID;
   }
 
   public abstract void setRawOffset(int offsetMillis);

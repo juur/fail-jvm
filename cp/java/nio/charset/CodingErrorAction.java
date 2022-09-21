@@ -13,8 +13,8 @@ public class CodingErrorAction {
 
   private final String name;
 
-  private CodingErrorAction(final String name) {
-    this.name = name;
+  private CodingErrorAction(final String newName) {
+    name = newName;
   }
 
   @Override

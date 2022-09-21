@@ -9,12 +9,12 @@ public class FieldPosition {
   private int   ei;
   private int   fieldId;
 
-  public FieldPosition(final Format.Field attribute) {
-    this.attribute = attribute;
+  public FieldPosition(final Format.Field newAttribute) {
+    this.attribute = newAttribute;
   }
 
-  public FieldPosition(final Format.Field attribute, final int fieldID) {
-    this.attribute = attribute;
+  public FieldPosition(final Format.Field newAttribute, final int fieldID) {
+    this.attribute = newAttribute;
     fieldId = fieldID;
   }
 
@@ -38,11 +38,11 @@ public class FieldPosition {
     return attribute;
   }
 
-  public void setBeginIndex(final int bi) {
-    this.bi = bi;
+  public void setBeginIndex(final int beginIndex) {
+    this.bi = beginIndex;
   }
 
-  public void setEndIndex(final int ei) {
-    this.ei = ei;
+  public void setEndIndex(final int endIndex) {
+    this.ei = endIndex;
   }
 }

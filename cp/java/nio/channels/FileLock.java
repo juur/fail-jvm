@@ -9,11 +9,11 @@ public abstract class FileLock {
   private final boolean     shared;
   private final long        size;
 
-  protected FileLock(final FileChannel channel, final long position, final long size, final boolean shared) {
-    this.channel = channel;
-    this.position = position;
-    this.size = size;
-    this.shared = shared;
+  protected FileLock(final FileChannel newChannel, final long newPosition, final long newSize, final boolean isShared) {
+    this.channel = newChannel;
+    this.position = newPosition;
+    this.size = newSize;
+    this.shared = isShared;
   }
 
   public final FileChannel channel() {
@@ -26,8 +26,8 @@ public abstract class FileLock {
 
   public abstract boolean isValid();
 
-  public final boolean overlaps(final long position, final long size) {
-    if (position + size < position() || position > position() + size())
+  public final boolean overlaps(final long checkPosition, final long checkSize) {
+    if (checkPosition + checkSize < position() || checkPosition > position() + size())
       return false;
     return true;
   }

@@ -57,6 +57,9 @@ public class CoderResult {
     return length;
   }
 
+  /**
+   * @throws CharacterCodingException
+   */
   public void throwException() throws CharacterCodingException {
 
   }

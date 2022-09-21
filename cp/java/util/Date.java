@@ -8,8 +8,8 @@ public class Date {
     date = System.currentTimeMillis() / 1000;
   }
 
-  public Date(final long date) {
-    this.date = date;
+  public Date(final long newDate) {
+    date = newDate;
   }
 
   public boolean after(final Date when) {

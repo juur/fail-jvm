@@ -1,8 +1,6 @@
 package java.util;
 
 import java.lang.reflect.Array;
-import java.util.ArrayList;
-import java.util.List;
 
 public class Arrays {
 
@@ -312,16 +310,6 @@ public class Arrays {
     return ret;
   }
 
-  public static int hashCode(final Object[] a) {
-	  if (a == null) return 0;
-
-	  int rc = 31;
-	  for (final Object b : a)
-		  rc += (b == null) ? 0 : b.hashCode();
-
-	  return rc;
-  }
-
   public static int hashCode(final boolean[] a) {
     int rc = 31;
     for (final boolean b : a)
@@ -369,6 +357,16 @@ public class Arrays {
     for (final long b : a)
       rc += b;
     return rc;
+  }
+
+  public static int hashCode(final Object[] a) {
+	  if (a == null) return 0;
+
+	  int rc = 31;
+	  for (final Object b : a)
+		  rc += b == null ? 0 : b.hashCode();
+
+	  return rc;
   }
 
   public static int hashCode(final short[] a) {

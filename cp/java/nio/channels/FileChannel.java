@@ -10,21 +10,24 @@ public abstract class FileChannel extends AbstractInterruptibleChannel implement
 
   }
 
-  public final FileLock lock() throws IOException {
-    return lock(0L, Long.MAX_VALUE, false);
-  }
-
-  @Override
-  public long read(final ByteBuffer[] dsts) throws IOException {
+  public long read(ByteBuffer[] dsts) throws IOException {
     return read(dsts, 0, dsts.length);
   }
+
+  abstract long read(ByteBuffer dst, long position);
 
   @Override
   public long write(final ByteBuffer[] srcs) throws IOException {
     return write(srcs, 0, srcs.length);
   }
 
+  abstract int write(ByteBuffer src, long position);
+
   abstract void force(boolean metaData);
+
+  public FileLock lock() throws IOException {
+    return lock(0, Integer.MAX_VALUE, false);
+  }
 
   abstract FileLock lock(long position, long size, boolean shared) throws IOException;
 }

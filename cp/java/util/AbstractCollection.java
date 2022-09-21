@@ -53,6 +53,23 @@ public abstract class AbstractCollection<E> implements Collection<E> {
   }
 
   @Override
+  public abstract Iterator<E> iterator();
+
+  @Override
+  public boolean remove(final Object o) {
+    final Iterator<E> it = iterator();
+    while (it.hasNext())
+    {
+      final Object tmp = it.next();
+      if(tmp.equals(o)) {
+        it.remove();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @Override
   public boolean removeAll(final Collection<?> c) {
     boolean rem = false;
     for (final Object o : c)
@@ -60,4 +77,35 @@ public abstract class AbstractCollection<E> implements Collection<E> {
         rem = true;
     return rem;
   }
+
+  @Override
+  public abstract int size();
+
+  @Override
+  public Object[] toArray() {
+    return toArray(new Object[size()]);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Override
+  public <T> T[] toArray(final T[] a) {
+    if (a.length >= size()) {
+      final Iterator<E> it = iterator();
+      int               i  = 0;
+
+      while (it.hasNext()) {
+        final Object tmp = it.next();
+        try {
+          a[i++] = (T) tmp;
+        } catch (final ClassCastException e) {
+          throw new ArrayStoreException();
+        }
+      }
+
+      return a;
+    }
+
+    return null;
+  }
+
 }

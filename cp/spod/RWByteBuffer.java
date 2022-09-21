@@ -4,8 +4,8 @@ import java.nio.*;
 
 public class RWByteBuffer extends ByteBuffer {
 
-  public RWByteBuffer(final byte[] buffer) {
-    super(buffer.length, true, 0, buffer);
+  public RWByteBuffer(final byte[] newBuffer) {
+    super(newBuffer.length, true, 0, newBuffer);
   }
 
   public RWByteBuffer(final int size) {

@@ -40,19 +40,19 @@ public abstract class CharBuffer extends Buffer implements Readable, Appendable,
   protected char[]       buffer;
   protected CharSequence csqBuffer;
 
-  public CharBuffer(final int size, final boolean hasArray, final int arrayOffset, final char[] buffer) {
-    super(size);
-    this.hasArray = hasArray;
-    this.arrayOffset = arrayOffset;
-    if (hasArray)
-      this.buffer = buffer;
-    else
-      this.buffer = null;
-  }
-
   protected CharBuffer(final CharSequence str) {
     this(str.length(), false, 0, null);
     csqBuffer = str;
+  }
+
+  public CharBuffer(final int size, final boolean newHasArray, final int newArrayOffset, final char[] newBuffer) {
+    super(size);
+    hasArray = newHasArray;
+    arrayOffset = newArrayOffset;
+    if (newHasArray)
+      buffer = newBuffer;
+    else
+      buffer = null;
   }
 
   @Override
@@ -74,8 +74,7 @@ public abstract class CharBuffer extends Buffer implements Readable, Appendable,
   public final char[] array() {
     if (hasArray())
       return buffer;
-    else
-      throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException();
   }
 
   @Override

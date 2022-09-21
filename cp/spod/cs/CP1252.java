@@ -21,93 +21,93 @@ public class CP1252 extends Charset {
         if (out.position() < out.capacity()) {
           final byte inb = in.get();
           char       rep = (char) inb;
-          System.out.println("in=" + rep);
+
           switch (inb) {
             // case (byte)0x81: rep=0x0; break;
             case (byte) 0x82:
               rep = 0x201a;
-              break;
+            break;
             case (byte) 0x83:
               rep = 0x192;
-              break;
+            break;
             case (byte) 0x84:
               rep = 0x201e;
-              break;
+            break;
             case (byte) 0x85:
               rep = 0x2026;
-              break;
+            break;
             case (byte) 0x86:
               rep = 0x2020;
-              break;
+            break;
             case (byte) 0x87:
               rep = 0x2021;
-              break;
+            break;
             case (byte) 0x88:
               rep = 0x2c6;
-              break;
+            break;
             case (byte) 0x89:
               rep = 0x2030;
-              break;
+            break;
             case (byte) 0x8a:
               rep = 0x160;
-              break;
+            break;
             case (byte) 0x8b:
               rep = 0x2039;
-              break;
+            break;
             case (byte) 0x8c:
               rep = 0x152;
-              break;
+            break;
             case (byte) 0x8d:
               rep = 0x0;
-              break;
+            break;
             case (byte) 0x8e:
               rep = 0x17d;
-              break;
+            break;
             // case (byte)0x8f: rep=0x0; break;
             // case (byte)0x90: rep=0x0; break;
             case (byte) 0x91:
               rep = 0x2018;
-              break;
+            break;
             case (byte) 0x92:
               rep = 0x2019;
-              break;
+            break;
             case (byte) 0x93:
               rep = 0x201c;
-              break;
+            break;
             case (byte) 0x94:
               rep = 0x201d;
-              break;
+            break;
             case (byte) 0x95:
               rep = 0x2022;
-              break;
+            break;
             case (byte) 0x96:
               rep = 0x2013;
-              break;
+            break;
             case (byte) 0x97:
               rep = 0x2014;
-              break;
+            break;
             case (byte) 0x98:
               rep = 0x2dc;
-              break;
+            break;
             case (byte) 0x99:
               rep = 0x2122;
-              break;
+            break;
             case (byte) 0x9a:
               rep = 0x161;
-              break;
+            break;
             case (byte) 0x9b:
               rep = 0x203a;
-              break;
+            break;
             case (byte) 0x9c:
               rep = 0x153;
-              break;
+            break;
             // case (byte)0x9d: rep=0x0; break;
             case (byte) 0x9e:
               rep = 0x17e;
-              break;
+            break;
             case (byte) 0x9f:
               rep = 0x178;
-              break;
+            break;
           }
           out.put(rep);
         } else
@@ -121,19 +121,15 @@ public class CP1252 extends Charset {
 
     private Encoder(final Charset cs) {
       super(cs, 1.0f, 1.0f);
-      System.out.println("CP1252: created Encoder");
     }
 
     @Override
     protected CoderResult encodeLoop(final CharBuffer in, final ByteBuffer out) {
-      System.out.println("encodeLoop: called");
-      System.out.println(
-        "encodeLoop: in limit=" + in.limit() + ", remaining=" + in.remaining() + ", pos=" + in.position() + " cap=" + in.capacity());
+
       while (in.hasRemaining()) {
-        System.out.println("encodeLoop: hasRemaining");
         if (out.position() < out.capacity()) {
           final char inch = in.get();
-          System.out.println("encodeLoop: in=" + inch);
+
           if (inch < 0x80 || inch > 0xBF)
             out.put((byte) (inch & 0xFF));
           else if (inch < 0x100) {
