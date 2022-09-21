@@ -3,7 +3,7 @@ fail-jvm is a partial implementation of the following:
 ## The Java(R) Virtual Machine specification, Java SE 7 Edition
 
 * class File parsing
-* 156 / 201 JVM instructions ("byte code")
+* 174 / 201 JVM instructions ("byte code")
 * threading, monitor locks
 
 ## The Java(R) Platform, Standard Edition 6, API Specification
@@ -27,7 +27,7 @@ The following packages have some implemented classes based on the published API 
 
 type make to compile
 
-by default looks in /usr/lib/jvm/java-1.6.0 for bin/javac. See Makefile top for overrides.
+by default looks in /usr/lib/jvm/java-1.8.0 for bin/javac. See Makefile top for overrides.
 
 to run, place Java source in a 'test' folder, and run with two arguments: ClassFile.class ClassFile
 Any java source in the test folder will be compiled
