@@ -29,7 +29,7 @@ public final class Long extends Number implements Comparable<Long> {
   }
 
   public static String toString(final long a) {
-    return new String(java.lang.Number.itoa(a, 10));
+    return new String(Number.itoa(a, 10));
   }
 
   public static Long valueOf(final long i) {

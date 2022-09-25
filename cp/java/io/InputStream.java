@@ -2,7 +2,10 @@ package java.io;
 
 public abstract class InputStream implements Closeable, Flushable {
 
-  public int available()
+  /**
+   * @throws IOException
+   */
+  public int available() throws IOException
   {
     return 0;
   }

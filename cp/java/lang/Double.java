@@ -31,21 +31,68 @@ public final class Double extends Number implements Comparable<Double> {
     SIZE = 64;
   }
 
+  public static native long doubleToLongBits(double value);
+
+  public static native long doubleToRawLongBits(double value);
+
+  public static native double longBitsToDouble(long bits);
+
   public static String toString(final double a) {
-    return "<double>";
+    System.out.println("Double.toString(" + doubleToRawLongBits(a) + ")");
+    if (isNaN(a))
+      return "NaN";
+
+    final Double        d  = a;
+    final StringBuilder sb = new StringBuilder();
+
+    if (d.sign != 0)
+      sb.append("-");
+    sb.append(d.sig);
+    sb.append("e");
+    sb.append(d.exp);
+    return sb.toString();
+
+  }
+
+  public static Double valueOf(final double d) {
+    return new Double(d);
+  }
+
+  public static Double valueOf(final String s) {
+    final double val = 0d;
+
+    return valueOf(val);
+  }
+
+  private static boolean isInfinity(final double a) {
+    return a == NEGATIVE_INFINITY || a == POSITIVE_INFINITY;
+  }
+
+  private static boolean isNaN(final double a) {
+    return a == NaN;
   }
 
   private final double value;
-
-  public static native double longBitsToDouble(long bits);
-  public static native long doubleToRawLongBits(double value);
-
-  public Double(final float val) {
-    value = val;
-  }
+  private final long   raw;
+  private final int    sign;
+  private final int    exp;
+  private final long   sig;
 
   public Double(final double val) {
     value = val;
+
+    raw = doubleToRawLongBits(val);
+    System.out.println("raw:" + raw);
+
+    sign = (int) ((0x8000000000000000L & raw) >> 63);
+
+    exp = (int) ((0x7ff0000000000000L & raw) >> 62);
+    System.out.println("exp:" + exp);
+    sig = 0x000fffffffffffffL & raw;
+  }
+
+  public Double(final float val) {
+    this((double) val);
   }
 
   @Override
@@ -68,20 +115,21 @@ public final class Double extends Number implements Comparable<Double> {
     return (int) value;
   }
 
+  public boolean isInfinity() {
+    return isInfinity(value);
+  }
+
+  public boolean isNaN() {
+    return isNaN(value);
+  }
+
   @Override
   public long longValue() {
     return (long) value;
   }
 
-  public static Double valueOf(double d)
-  {
-	  return new Double(d);
-  }
-
-  public static Double valueOf(String s)
-  {
-	  double val = 0f;
-
-	  return valueOf(val);
+  @Override
+  public String toString() {
+    return toString(value);
   }
 }

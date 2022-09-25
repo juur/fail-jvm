@@ -5,16 +5,30 @@ import java.nio.channels.InterruptibleChannel;
 
 public abstract class AbstractInterruptibleChannel implements InterruptibleChannel {
 
+  private boolean      isOpen    = false;
+  private final Object closeSync = new Object();
+
   protected AbstractInterruptibleChannel() {
-
-  }
-
-  protected final void begin() {
 
   }
 
   @Override
   public final void close() throws IOException {
+    synchronized (closeSync) {
+      if (isOpen)
+        return;
+
+      isOpen = false;
+      implCloseChannel();
+    }
+  }
+
+  @Override
+  public final boolean isOpen() {
+    return isOpen;
+  }
+
+  protected final void begin() {
 
   }
 
@@ -26,9 +40,4 @@ public abstract class AbstractInterruptibleChannel implements InterruptibleChann
   }
 
   protected abstract void implCloseChannel() throws IOException;
-
-  @Override
-  public final boolean isOpen() {
-    return false;
-  }
 }

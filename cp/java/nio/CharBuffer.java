@@ -2,15 +2,13 @@ package java.nio;
 
 import java.io.IOException;
 
-import spod.ROCharBuffer;
-
 public abstract class CharBuffer extends Buffer implements Readable, Appendable, CharSequence, Comparable<CharBuffer> {
 
   public static CharBuffer allocate(final int capacity) {
     if (capacity < 0)
       throw new IllegalArgumentException();
 
-    return new spod.RWCharBuffer(capacity);
+    return new RWCharBuffer(capacity);
   }
 
   public static CharBuffer wrap(final char[] array) {
@@ -40,11 +38,6 @@ public abstract class CharBuffer extends Buffer implements Readable, Appendable,
   protected char[]       buffer;
   protected CharSequence csqBuffer;
 
-  protected CharBuffer(final CharSequence str) {
-    this(str.length(), false, 0, null);
-    csqBuffer = str;
-  }
-
   public CharBuffer(final int size, final boolean newHasArray, final int newArrayOffset, final char[] newBuffer) {
     super(size);
     hasArray = newHasArray;
@@ -53,6 +46,19 @@ public abstract class CharBuffer extends Buffer implements Readable, Appendable,
       buffer = newBuffer;
     else
       buffer = null;
+  }
+
+  protected CharBuffer(final CharSequence str) {
+    this(str.length(), false, 0, null);
+    csqBuffer = str;
+  }
+
+  protected CharBuffer(final int size)
+  {
+    super(size);
+    hasArray = false;
+    arrayOffset = 0;
+    buffer = null;
   }
 
   @Override

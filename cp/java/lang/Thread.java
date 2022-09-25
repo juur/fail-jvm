@@ -66,6 +66,10 @@ public class Thread implements Runnable {
     this(newGroup, null, "Thread" + threadCount++);
   }
 
+  public long getId() {
+    return getThreadId();
+  }
+
   public String getName() {
     return name;
   }
@@ -73,8 +77,6 @@ public class Thread implements Runnable {
   // public State getState() {
   // return state;
   // }
-
-  private native void nativeStart();
 
   @Override
   public void run() {
@@ -90,4 +92,8 @@ public class Thread implements Runnable {
       group.add(this);
     nativeStart();
   }
+
+  private native long getThreadId();
+
+  private native void nativeStart();
 }

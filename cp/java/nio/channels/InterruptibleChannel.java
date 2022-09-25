@@ -5,5 +5,5 @@ import java.io.IOException;
 public interface InterruptibleChannel extends Channel {
 
   @Override
-  void close() throws IOException;
+  public void close() throws IOException;
 }

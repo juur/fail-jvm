@@ -310,6 +310,36 @@ public class Arrays {
     return ret;
   }
 
+  public static boolean equals(final byte[] a, final byte[] a2) {
+    if (a == null && a2 == null)
+      return true;
+    if (a == null || a2 == null)
+      return false;
+    if (a.length != a2.length)
+      return false;
+
+    for (int i = 0; i < a.length; i++)
+      if (a[i] != a2[i])
+        return false;
+
+    return true;
+  }
+
+  public static boolean equals(final char[] a, final char[] a2) {
+    if (a == null && a2 == null)
+      return true;
+    if (a == null || a2 == null)
+      return false;
+    if (a.length != a2.length)
+      return false;
+
+    for (int i = 0; i < a.length; i++)
+      if (a[i] != a2[i])
+        return false;
+
+    return true;
+  }
+
   public static int hashCode(final boolean[] a) {
     int rc = 31;
     for (final boolean b : a)
@@ -360,13 +390,14 @@ public class Arrays {
   }
 
   public static int hashCode(final Object[] a) {
-	  if (a == null) return 0;
+    if (a == null)
+      return 0;
 
-	  int rc = 31;
-	  for (final Object b : a)
-		  rc += b == null ? 0 : b.hashCode();
+    int rc = 31;
+    for (final Object b : a)
+      rc += b == null ? 0 : b.hashCode();
 
-	  return rc;
+    return rc;
   }
 
   public static int hashCode(final short[] a) {
@@ -379,4 +410,6 @@ public class Arrays {
   public static String toString(final int a) {
     return String.valueOf(a);
   }
+
+  private Arrays() {}
 }

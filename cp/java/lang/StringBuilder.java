@@ -9,7 +9,11 @@ public final class StringBuilder implements Appendable, CharSequence {
   private int    ptr;
 
   public StringBuilder() {
-    backing = new char[25];
+    this(25);
+  }
+
+  public StringBuilder(final int length) {
+    backing = new char[length];
     ptr = 0;
   }
 
@@ -53,6 +57,10 @@ public final class StringBuilder implements Appendable, CharSequence {
 
   public StringBuilder append(final double a) {
     return append(Double.toString(a));
+  }
+
+  public StringBuilder append(final float a) {
+    return append(Float.toString(a));
   }
 
   public StringBuilder append(final int a) {

@@ -5,7 +5,7 @@ public abstract class ClassLoader {
   final static private ClassLoader systemClassLoader;
 
   static {
-    systemClassLoader = new spod.ClassLoader();
+    systemClassLoader = new fail.ClassLoader();
   }
 
   public static ClassLoader getSystemClassLoader() {

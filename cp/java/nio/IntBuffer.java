@@ -19,6 +19,10 @@ public abstract class IntBuffer extends Buffer {
     return 0;
   }
 
+  public abstract int get();
+
+  public abstract int get(int index);
+
   @Override
   public boolean hasArray() {
     // TODO Auto-generated method stub
@@ -37,4 +41,7 @@ public abstract class IntBuffer extends Buffer {
     return false;
   }
 
+  public abstract IntBuffer put(int i);
+
+  public abstract IntBuffer put(int index, int i);
 }

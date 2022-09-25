@@ -14,7 +14,7 @@ public abstract class Charset implements Comparable<Charset> {
   private static final CharsetProvider defaultProvider;
 
   static {
-    defaultProvider = new spod.cs.SpodCharsetProvider();
+    defaultProvider = new fail.cs.SpodCharsetProvider();
   }
 
   public static SortedMap<String, Charset> availableCharsets() {
@@ -22,10 +22,10 @@ public abstract class Charset implements Comparable<Charset> {
   }
 
   public static Charset defaultCharset() {
-    return spod.cs.UTF_8.INSTANCE;
+    return fail.cs.UTF_8.INSTANCE;
   }
 
-  static Charset forName(final String charsetName) {
+  public static Charset forName(final String charsetName) {
     return defaultProvider.charsetForName(charsetName);
   }
 

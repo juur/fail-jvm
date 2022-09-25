@@ -68,7 +68,7 @@ public abstract class Buffer {
     return position;
   }
 
-  public Buffer position(final int newPosition) {
+  public final Buffer position(final int newPosition) {
     if (newPosition < 0 || newPosition > limit())
       throw new IllegalArgumentException();
     if (mark > newPosition)

@@ -1,6 +1,6 @@
 package java.util;
 
-import spod.TimeZones;
+import fail.TimeZones;
 
 public abstract class TimeZone {
 

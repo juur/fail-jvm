@@ -8,7 +8,8 @@ public class FilterInputStream extends InputStream {
     in = newIn;
   }
 
-  public int available() {
+  @Override
+  public int available() throws IOException {
     return 1;
   }
 

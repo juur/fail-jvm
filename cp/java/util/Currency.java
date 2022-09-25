@@ -530,6 +530,8 @@ public class Currency {
   }
 
   public static Currency getInstance(final String currencyCode) {
+    if (map == null)
+      return null;
     return map.get(currencyCode);
   }
 

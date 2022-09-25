@@ -3,14 +3,14 @@ package java.util;
 import java.io.Serializable;
 
 public class EventObject implements Serializable {
-  protected Object source;
   private static final long serialVersionUID = 1L;
-  
-  public EventObject(Object source)
+  protected Object source;
+
+  public EventObject(final Object nSource)
   {
-    if (source == null)
+    if (nSource == null)
       throw new IllegalArgumentException();
-    this.source = source;
+    source = nSource;
   }
 
   public Object getSource() {

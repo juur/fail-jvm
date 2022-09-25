@@ -31,14 +31,57 @@ public final class Float extends Number implements Comparable<Float> {
     SIZE = 32;
   }
 
-  public static String toString(final float b) {
-    return "<float>";
+  public static native int floatToRawIntBits(float value);
+
+  public static native float intBitsToFloat(int bits);
+
+  public static String toString(final float a) {
+    if (isNaN(a))
+      return "NaN";
+
+    final Float         f  = a;
+    final StringBuilder sb = new StringBuilder();
+
+    if (f.sign != 0)
+      sb.append("-");
+    sb.append(f.sig);
+    sb.append("e");
+    sb.append(f.exp);
+    return sb.toString();
+  }
+
+  public static Float valueOf(final float f) {
+    return new Float(f);
+  }
+
+  public static Float valueOf(final String s) {
+    final float val = 0f;
+
+    return valueOf(val);
+  }
+
+  private static boolean isInfinity(final float a) {
+    return a == NEGATIVE_INFINITY || a == POSITIVE_INFINITY;
+  }
+
+  private static boolean isNaN(final float a) {
+    return a == NaN;
   }
 
   private final float value;
+  private final int   raw;
+  private final int   sign;
+  private final int   exp;
+  private final int   sig;
 
   public Float(final float val) {
     value = val;
+
+    raw = floatToRawIntBits(val);
+
+    sign = (0x80000000 & raw) >> 31;
+    exp = (0x7f800000 & raw) >> 30;
+    sig = 0x007fffff & raw;
   }
 
   @Override
@@ -61,9 +104,21 @@ public final class Float extends Number implements Comparable<Float> {
     return (int) value;
   }
 
+  public boolean isInfinity() {
+    return isInfinity(value);
+  }
+
+  public boolean isNaN() {
+    return isNaN(value);
+  }
+
   @Override
   public long longValue() {
     return (long) value;
   }
 
+  @Override
+  public String toString() {
+    return toString(value);
+  }
 }

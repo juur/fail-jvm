@@ -1,14 +1,19 @@
 package java.io;
 
+import java.nio.ImplFileChannel;
+import java.nio.channels.FileChannel;
+
 public class FileInputStream extends InputStream {
 
   private final FileDescriptor fdObj;
   private boolean              isClosed;
+  private final FileChannel    fc;
 
   public FileInputStream(final File file) throws FileNotFoundException, IOException {
     isClosed = false;
     fdObj = new FileDescriptor(file);
     fdObj.open(false);
+    fc = new ImplFileChannel(fdObj);
   }
 
   public FileInputStream(final FileDescriptor fd) {
@@ -16,11 +21,13 @@ public class FileInputStream extends InputStream {
     if (fd == null)
       throw new NullPointerException();
     fdObj = fd;
+    fc = new ImplFileChannel(fdObj);
   }
 
   @Override
-  public int available()
-  {
+  public int available() throws IOException {
+    if (isClosed)
+      throw new IOException();
     return 1;
   }
 
@@ -30,13 +37,17 @@ public class FileInputStream extends InputStream {
       return;
     isClosed = true;
     fdObj.close();
+    fc.close();
+  }
+
+  public FileChannel getChannel() {
+    return fc;
   }
 
   /**
    * @throws IOException
    */
-  public final FileDescriptor getFD() throws IOException
-  {
+  public final FileDescriptor getFD() throws IOException {
     return fdObj;
   }
 
@@ -44,8 +55,7 @@ public class FileInputStream extends InputStream {
   native public int read() throws IOException;
 
   @Override
-  public int read(final byte[] b) throws IOException
-  {
+  public int read(final byte[] b) throws IOException {
     return read(b, 0, b.length);
   }
 

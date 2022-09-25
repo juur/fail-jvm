@@ -7,39 +7,59 @@ import java.util.Locale;
 
 public class PrintStream extends FilterOutputStream implements Appendable {
 
-  private boolean   error;
-  private Formatter formatter;
+  private boolean       error;
+  private final boolean autoFlush;
+  private final Charset charset;
+  private Formatter     formatter;
 
-  public PrintStream(final OutputStream outStream) {
-    super(outStream);
+  public PrintStream(final OutputStream os) {
+    super(os);
     error = false;
+    autoFlush = false;
+    charset = Charset.defaultCharset();
   }
+
+  public PrintStream(final OutputStream os, final boolean b, final String csn) {
+    super(os);
+    error = false;
+    autoFlush = b;
+    charset = Charset.forName(csn);
+  }
+
 
   @Override
   public Appendable append(final char c) throws IOException {
-    write(Charset.defaultCharset().encode(CharBuffer.wrap(new char[] { c })).array());
+    write(charset.encode(CharBuffer.wrap(new char[] { c })).array());
+    checkAutoFlush();
     return this;
   }
 
   @Override
   public Appendable append(final CharSequence csq) throws IOException {
-    write(Charset.defaultCharset().encode(CharBuffer.wrap(csq)).array());
+    write(charset.encode(CharBuffer.wrap(csq)).array());
+    checkAutoFlush();
     return this;
   }
 
   @Override
-  public Appendable append(final CharSequence csq, final int start, final int end)
-    throws IOException {
-    write(Charset.defaultCharset().encode(CharBuffer.wrap(csq.subSequence(start, end))).array());
+  public Appendable append(final CharSequence csq, final int start, final int end) throws IOException {
+    write(charset.encode(CharBuffer.wrap(csq.subSequence(start, end))).array());
+    checkAutoFlush();
     return this;
+  }
+
+  public void checkAutoFlush() {
+    if (autoFlush)
+      try {
+        flush();
+      } catch (final IOException e) {
+        setError();
+      }
+    clearError();
   }
 
   public boolean checkError() {
     return error;
-  }
-
-  protected void clearError() {
-    error = false;
   }
 
   public PrintStream format(final Locale l, final String format, final Object... args) {
@@ -136,18 +156,22 @@ public class PrintStream extends FilterOutputStream implements Appendable {
     return format(l, format, args);
   }
 
-  public PrintStream printf(final String format, final Object... args)
-  {
+  public PrintStream printf(final String format, final Object... args) {
     return format(format, args);
   }
 
   public void println() {
     print("\n");
+    checkAutoFlush();
   }
 
   public void println(final String arg) {
     print(arg);
     println();
+  }
+
+  protected void clearError() {
+    error = false;
   }
 
   protected void setError() {

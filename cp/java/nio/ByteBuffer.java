@@ -6,19 +6,22 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
     if (capacity < 0)
       throw new IllegalArgumentException();
 
-    return new spod.RWByteBuffer(capacity);
+    return new RWByteBuffer(capacity);
   }
 
-  public static ByteBuffer allocateDirect(final int capcaity) {
-    return null;
+  public static ByteBuffer allocateDirect(final int capacity) {
+    if (capacity < 0)
+      throw new IllegalArgumentException();
+
+    return new DirectRWByteBuffer(capacity);
   }
 
   public static ByteBuffer wrap(final byte[] array) {
-    return new spod.RWByteBuffer(array);
+    return new RWByteBuffer(array);
   }
 
   public static ByteBuffer wrap(final byte[] array, final int offset, final int length) {
-    final ByteBuffer ret = new spod.RWByteBuffer(array);
+    final ByteBuffer ret = new java.nio.RWByteBuffer(array);
     ret.position(offset);
     ret.limit(offset + length);
     return ret;
@@ -27,7 +30,8 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
   private final int     arrayOffset;
   private ByteOrder     byteOrder;
   private final boolean hasArray;
-  protected byte[]      buffer;
+
+  protected byte[] buffer;
 
   protected ByteBuffer(final int size, final boolean newHasArray, final int newArrayOffset, final byte[] newBuffer) {
     super(size);
@@ -113,6 +117,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
 
   public abstract int getInt(int index);
 
+  public abstract long getLong();
+
+  public abstract long getLong(int index);
+
   public abstract short getShort();
 
   public abstract short getShort(int index);
@@ -182,6 +190,10 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
   public abstract ByteBuffer putInt(int value);
 
   public abstract ByteBuffer putInt(int index, int value);
+
+  public abstract ByteBuffer putLong(long value);
+
+  public abstract ByteBuffer putLong(long index, int value);
 
   public abstract ByteBuffer putShort(int index, short value);
 

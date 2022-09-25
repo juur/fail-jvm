@@ -2,9 +2,9 @@ CC			:=	gcc
 JAVA_HOME	:=	/usr/lib/jvm/java-1.8.0
 CFLAGS		:=	\
 	-std=c99 \
-	-O1 \
+	-Og \
 	-no-pie \
-	-ggdb \
+	-ggdb3 \
 	-Wall \
 	-Wextra \
 	-pedantic \
@@ -35,6 +35,7 @@ CFLAGS		:=	\
 	-Wsuggest-attribute=noreturn \
 	-Wswitch-enum \
 	-Wunsuffixed-float-constants \
+	-Wno-unused-function \
 	-Wwrite-strings
 
 LDFLAGS		:= -lpthread -lm
@@ -67,6 +68,10 @@ ifeq ($(DEBUG),1)
 	CFLAGS += -DDEBUG
 endif
 
+ifeq ($(DEBUG_CODE),1)
+	CFLAGS += -DDEBUG_CODE
+endif
+
 export JAVA_HOME
 
 default:	all
@@ -83,7 +88,10 @@ count:
 list:
 		@echo $(JCP_SRCS)
 
-all:		$(TARGET) $(JCP_CLSS) $(J_CLSS)
+rt.jar:	$(JCP_CLSS)
+	jar cf rt.jar MANIFEST.MF -C cp/ .
+
+all:		$(TARGET) $(JCP_CLSS) $(J_CLSS) rt.jar
 
 %.class: 	%.java
 	$(JAVAC) $(JFLAGS) $<

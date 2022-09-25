@@ -7,13 +7,13 @@ public class File implements Serializable, Comparable<File> {
   public static String separator;
   public static char   separatorChar;
 
-  private final String pathname;
+  private static final long serialVersionUID = 1L;
 
+  private final String pathname;
   private boolean isFile, isDirectory, isHidden;
   private boolean canExecute, canRead, canWrite;
+
   long            lastModified, length;
-  
-  private static final long serialVersionUID = 1L;
 
   public File(final File parent, final String child) {
     this(parent + separator + child);
@@ -23,8 +23,6 @@ public class File implements Serializable, Comparable<File> {
   public File(final String newPathname) {
     pathname = newPathname;
   }
-
-  private native void access();
 
   public boolean canExecute() {
     access();
@@ -46,9 +44,9 @@ public class File implements Serializable, Comparable<File> {
     return toString().compareTo(comp.toString());
   }
 
-  private native void creat();
-
-  private native void delete();
+  public String getAbsolutePath() {
+    return null;
+  }
 
   public boolean isDirectory() {
     stat();
@@ -79,6 +77,12 @@ public class File implements Serializable, Comparable<File> {
   public String toString() {
     return pathname;
   }
+
+  private native void access();
+
+  private native void creat();
+
+  private native void delete();
 
   private native void stat();
 }

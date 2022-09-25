@@ -5,6 +5,7 @@ public class FilterOutputStream extends OutputStream {
   protected OutputStream out;
 
   public FilterOutputStream(final OutputStream newOut) {
+    super();
     out = newOut;
   }
 

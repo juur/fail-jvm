@@ -2,6 +2,21 @@ package java.lang;
 
 public abstract class Number {
 
+  private static int isValidRadix(final char c, final int radix) {
+    if (radix <= 0 || radix > 36)
+      throw new IllegalArgumentException();
+    if (c >= '0' && c <= '0' + Math.max(radix, 10))
+      return c - '0';
+    if (radix > 10) {
+      if (c >= 'a' && c <= 'a' + Math.max(radix - 10, 26))
+        return 10 + c - 'a';
+      if (c >= 'A' && c <= 'A' + Math.max(radix - 10, 26))
+        return 10 + c - 'A';
+    }
+
+    return -1;
+  }
+
   protected static long atoi(final char[] str, final int radix, final long max, final long min)
     throws NumberFormatException {
     long sign = 1, base = 0;
@@ -26,7 +41,7 @@ public abstract class Number {
           return max;
         return min;
       }
-      base = (radix * base) + val;
+      base = radix * base + val;
       i++;
     }
     if (val == -1)
@@ -44,13 +59,13 @@ public abstract class Number {
 
     final boolean sign = radix == 10 && value < 0;
 
-    if (sign)
-      v = -value;
-    else
+    //if (sign)
+    //  v = -value;
+    //else
       v = value;
 
-    while (v > 0 || tp == 0) {
-      i = v % radix;
+    while (v != 0 || tp == 0) {
+      i = Math.abs(v % radix);
       v /= radix;
       if (i < 10)
         tmp[tp++] = (char) (i + 48);
@@ -81,20 +96,5 @@ public abstract class Number {
 
   public short shortValue() {
     return (short) intValue();
-  }
-
-  private static int isValidRadix(final char c, final int radix) {
-    if (radix <= 0 || radix > 36)
-      throw new IllegalArgumentException();
-    if (c >= '0' && c <= '0' + Math.max(radix, 10))
-      return c - '0';
-    if (radix > 10) {
-      if (c >= 'a' && c <= 'a' + Math.max(radix - 10, 26))
-        return 10 + c - 'a';
-      if (c >= 'A' && c <= 'A' + Math.max(radix - 10, 26))
-        return 10 + c - 'A';
-    }
-  
-    return -1;
   }
 }

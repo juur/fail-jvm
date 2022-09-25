@@ -7,6 +7,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
+import java.util.HashMap;
 import java.util.Map;
 
 public final class Class<T> implements GenericDeclaration, Type, AnnotatedElement {
@@ -21,7 +22,7 @@ public final class Class<T> implements GenericDeclaration, Type, AnnotatedElemen
   private final ClassLoader  classLoader;
   private T[]                enumConstants;
 
-  private Map<String, Method> methodMap;
+  private final Map<String, Method> methodMap;
 
   Class() {
     isArray = false;
@@ -32,6 +33,7 @@ public final class Class<T> implements GenericDeclaration, Type, AnnotatedElemen
     isInterface = false;
     modifiers = 0;
     classLoader = ClassLoader.getSystemClassLoader();
+    methodMap = new HashMap<String, Method>();
   }
 
   @Override
@@ -59,7 +61,7 @@ public final class Class<T> implements GenericDeclaration, Type, AnnotatedElemen
     return annotations == null ? new Annotation[0] : annotations;
   }
 
-  public String getCanonicalname() {
+  public String getCanonicalName() {
     return canonicalName;
   }
 

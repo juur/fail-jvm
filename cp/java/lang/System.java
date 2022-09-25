@@ -1,25 +1,26 @@
 package java.lang;
 
 import java.io.FileDescriptor;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.PrintStream;
 
 public final class System {
 
   public static PrintStream err;
-  public static PrintStream in;
+  public static InputStream in;
   public static PrintStream out;
 
   private static FileOutputStream fosErr;
-  private static FileOutputStream fosIn;
+  private static FileInputStream  fosIn;
   private static FileOutputStream fosOut;
 
   static {
     fosOut = new FileOutputStream(FileDescriptor.out);
-    fosIn = new FileOutputStream(FileDescriptor.in);
+    in = fosIn = new FileInputStream(FileDescriptor.in);
     fosErr = new FileOutputStream(FileDescriptor.err);
     out = new PrintStream(fosOut);
-    in = new PrintStream(fosIn);
     err = new PrintStream(fosErr);
   }
 
