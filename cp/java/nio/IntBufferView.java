@@ -1,6 +1,6 @@
 package java.nio;
 
-class IntBufferView extends IntBuffer {
+final class IntBufferView extends IntBuffer {
 
   private final ByteBuffer buf;
   private final int        bufpos;
@@ -14,8 +14,8 @@ class IntBufferView extends IntBuffer {
 
   @Override
   public int get() {
-    final char ret = buf.getChar(bufpos + position());
-    position(position() + 2);
+    final int ret = buf.getInt(bufpos + position());
+    position(position() + 4);
     return ret;
   }
 
@@ -24,7 +24,7 @@ class IntBufferView extends IntBuffer {
     if (index < 0)
       throw new IndexOutOfBoundsException();
 
-    return buf.getChar(index * 2);
+    return buf.getInt(index * 4);
   }
 
   @Override
@@ -43,7 +43,7 @@ class IntBufferView extends IntBuffer {
       throw new ReadOnlyBufferException();
     buf.putInt(bufpos + position(), c);
 
-    position(position() + 2);
+    position(position() + 4);
     return this;
   }
 

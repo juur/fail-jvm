@@ -5,8 +5,7 @@ public abstract class InputStream implements Closeable, Flushable {
   /**
    * @throws IOException
    */
-  public int available() throws IOException
-  {
+  public int available() throws IOException {
     return 0;
   }
 
@@ -16,9 +15,7 @@ public abstract class InputStream implements Closeable, Flushable {
   @Override
   public void flush() throws IOException {}
 
-  public void mark(final int readlimit)
-  {
-  }
+  public void mark(final int readlimit) {}
 
   public boolean markSupported() {
     return false;

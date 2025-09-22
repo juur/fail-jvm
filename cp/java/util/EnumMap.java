@@ -2,7 +2,7 @@ package java.util;
 
 public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V> {
 
-  private Set<K> keySet;
+  private Set<K>       keySet;
   @SuppressWarnings("unused")
   private ArrayList<V> list;
 
@@ -12,8 +12,7 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V> {
     list = new ArrayList<V>(keySet.size());
   }
 
-  public EnumMap(final EnumMap<K, ? extends V> m) {
-  }
+  public EnumMap(final EnumMap<K, ? extends V> m) {}
 
   public EnumMap(final Map<K, ? extends V> m) {}
 

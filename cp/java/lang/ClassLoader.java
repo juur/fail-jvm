@@ -1,5 +1,7 @@
 package java.lang;
 
+import java.net.URL;
+
 public abstract class ClassLoader {
 
   final static private ClassLoader systemClassLoader;
@@ -12,6 +14,10 @@ public abstract class ClassLoader {
     return systemClassLoader;
   }
 
+  public static URL getSystemResource(final String name) {
+    return getSystemClassLoader().getResource(name);
+  }
+
   private final ClassLoader parent;
 
   protected ClassLoader() {
@@ -22,8 +28,21 @@ public abstract class ClassLoader {
     parent = newParent;
   }
 
-  void clearAssertionStatus() {
-    // TODO
+  public ClassLoader getParent() {
+    return parent;
+  }
+
+  public URL getResource(final String name) {
+    URL ret;
+
+    if (getParent() != null) {
+      if ((ret = getParent().getResource(name)) != null)
+        return ret;
+    } else if (this != getSystemClassLoader()) {
+      if ((ret = getSystemClassLoader().getResource(name)) != null)
+        return ret;
+    }
+    return findResource(name);
   }
 
   protected native Class<?> findClass(String name) throws ClassNotFoundException;
@@ -32,8 +51,8 @@ public abstract class ClassLoader {
 
   protected final native Class<?> findLoadedClass(String name);
 
-  public ClassLoader getParent() {
-    return parent;
+  protected URL findResource(final String name) {
+    return null;
   }
 
   protected Class<?> loadClass(final String name) throws ClassNotFoundException {
@@ -60,4 +79,8 @@ public abstract class ClassLoader {
   }
 
   protected final native void resolveClass(Class<?> c);
+
+  void clearAssertionStatus() {
+    // TODO
+  }
 }

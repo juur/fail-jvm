@@ -12,7 +12,10 @@ public interface Collection<E> extends Iterable<E> {
 
   public boolean containsAll(Collection<?> c);
 
-  public boolean isEmtpy();
+  public boolean isEmpty();
+
+  @Override
+  public Iterator<E> iterator();
 
   public boolean remove(Object o);
 

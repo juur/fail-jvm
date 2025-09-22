@@ -1,8 +1,6 @@
 package java.io;
 
-
-public class ObjectOutputStream extends OutputStream
-implements ObjectOutput, ObjectStreamConstants {
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
 
   @Override
   public void write(final byte[] b) throws IOException {

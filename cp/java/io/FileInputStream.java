@@ -1,6 +1,6 @@
 package java.io;
 
-import java.nio.ImplFileChannel;
+import java.nio.channels.ImplFileChannel;
 import java.nio.channels.FileChannel;
 
 public class FileInputStream extends InputStream {

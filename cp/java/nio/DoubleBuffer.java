@@ -18,6 +18,10 @@ public abstract class DoubleBuffer extends Buffer {
     return 0;
   }
 
+  public abstract double get();
+
+  public abstract double get(int index);
+
   @Override
   public boolean hasArray() {
     // TODO Auto-generated method stub
@@ -36,4 +40,7 @@ public abstract class DoubleBuffer extends Buffer {
     return false;
   }
 
+  public abstract DoubleBuffer put(double d);
+
+  public abstract DoubleBuffer put(int index, double d);
 }

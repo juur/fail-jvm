@@ -38,8 +38,8 @@ public class Collections {
     }
 
     @Override
-    public boolean isEmtpy() {
-      return base.isEmtpy();
+    public boolean isEmpty() {
+      return base.isEmpty();
     }
 
     @Override
@@ -80,7 +80,7 @@ public class Collections {
     public boolean retainAll(final Collection<?> c) {
       throw new UnsupportedOperationException();
     }
-
+ 
     @Override
     public int size() {
       return base.size();

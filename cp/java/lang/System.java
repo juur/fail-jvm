@@ -24,7 +24,13 @@ public final class System {
     err = new PrintStream(fosErr);
   }
 
-  public static void arraycopy(final Object src, final int srcPos, final Object dest, final int destPos, final int length) {
+  public static void arraycopy(
+    final Object src,
+    final int srcPos,
+    final Object dest,
+    final int destPos,
+    final int length
+  ) {
     if (dest == null || src == null)
       throw new NullPointerException();
     if (srcPos < 0 || destPos < 0 || length < 0)
@@ -55,4 +61,8 @@ public final class System {
   public static native void exit(int status);
 
   public static native void gc();
+
+  public static String getProperty(String string) {
+    return null; /* TODO */
+  }
 }

@@ -19,8 +19,8 @@ public abstract class AbstractInterruptibleChannel implements InterruptibleChann
         return;
 
       isOpen = false;
-      implCloseChannel();
     }
+    implCloseChannel();
   }
 
   @Override

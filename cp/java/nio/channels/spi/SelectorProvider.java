@@ -35,6 +35,5 @@ public abstract class SelectorProvider {
 
   public abstract ServerSocketChannel openServerSocketChannel() throws IOException;
 
-  public abstract SocketChannel openSocketChannel()
-    throws IOException;
+  public abstract SocketChannel openSocketChannel() throws IOException;
 }

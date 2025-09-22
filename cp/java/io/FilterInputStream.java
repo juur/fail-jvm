@@ -19,14 +19,12 @@ public class FilterInputStream extends InputStream {
   }
 
   @Override
-  public void mark(final int readlimit)
-  {
+  public void mark(final int readlimit) {
     in.mark(readlimit);
   }
 
   @Override
-  public boolean markSupported()
-  {
+  public boolean markSupported() {
     return in.markSupported();
   }
 
@@ -46,8 +44,7 @@ public class FilterInputStream extends InputStream {
   }
 
   @Override
-  public void reset() throws IOException
-  {
+  public void reset() throws IOException {
     in.reset();
   }
 }

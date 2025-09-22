@@ -1,6 +1,6 @@
 package java.util.regex;
 
-public class Matcher implements MatchResult {
+public final class Matcher implements MatchResult {
 
   private class MatchResultImpl implements MatchResult {
 
@@ -53,12 +53,12 @@ public class Matcher implements MatchResult {
   }
 
   private CharSequence input;
-  private Pattern            pattern;
-  private boolean            anchor;
-  private boolean            trans;
-  private int                regionEnd;
-  private int                regionStart;
-  private int                index;
+  private Pattern      pattern;
+  private boolean      anchor;
+  private boolean      trans;
+  private int          regionEnd;
+  private int          regionStart;
+  private int          index;
 
   Matcher(final Pattern newPattern, final CharSequence newInput) {
     pattern = newPattern;
@@ -134,8 +134,8 @@ public class Matcher implements MatchResult {
   }
 
   public boolean matches() {
-    // TODO
-    return false;
+    /* TODO this is just an interim naive thing */
+    return _matches(input, pattern.pattern());
   }
 
   public Pattern pattern() {
@@ -143,7 +143,8 @@ public class Matcher implements MatchResult {
   }
 
   public Matcher region(final int newStart, final int newEnd) {
-    if (regionStart < 0 || regionEnd < 0 || regionEnd < regionStart || regionStart > input.length() || regionEnd > input.length())
+    if (regionStart < 0 || regionEnd < 0 || regionEnd < regionStart || regionStart > input.length()
+      || regionEnd > input.length())
       throw new IndexOutOfBoundsException();
     regionStart = newStart;
     regionEnd = newEnd;
@@ -214,5 +215,7 @@ public class Matcher implements MatchResult {
     trans = b;
     return this;
   }
+
+  private native boolean _matches(CharSequence seq, CharSequence pattern);
 
 }

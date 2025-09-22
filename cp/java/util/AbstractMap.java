@@ -8,13 +8,13 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     private V       value;
 
     public SimpleEntry(final K newKey, final V newValue) {
-      this.key = newKey;
-      this.value = newValue;
+      key = newKey;
+      value = newValue;
     }
 
     public SimpleEntry(final Map.Entry<? extends K, ? extends V> entry) {
-      this.key = entry.getKey();
-      this.value = entry.getValue();
+      key = entry.getKey();
+      value = entry.getValue();
     }
 
     @Override
@@ -29,7 +29,7 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
 
     @Override
     public V setValue(final V newValue) {
-      this.value = newValue;
+      value = newValue;
       return newValue;
     }
 
@@ -41,13 +41,13 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     private final V value;
 
     public SimpleImmutableEntry(final K newKey, final V newValue) {
-      this.key = newKey;
-      this.value = newValue;
+      key = newKey;
+      value = newValue;
     }
 
     public SimpleImmutableEntry(final Map.Entry<? extends K, ? extends V> entry) {
-      this.key = entry.getKey();
-      this.value = entry.getValue();
+      key = entry.getKey();
+      value = entry.getValue();
     }
 
     @Override
@@ -93,6 +93,9 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
   }
 
   @Override
+  public abstract Set<Map.Entry<K, V>> entrySet();
+
+  @Override
   public V get(final Object key) {
     for (final Entry<K, V> v : entrySet())
       if (key == null ? v.getKey() == null : key.equals(v.getKey()))
@@ -115,7 +118,10 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
 
   @Override
   public Set<K> keySet() {
-    throw new UnsupportedOperationException("TODO");
+    final HashSet<K> ret = new HashSet<K>();
+    for (final Entry<K, V> ent : entrySet())
+      ret.add(ent.getKey());
+    return ret;
   }
 
   @Override
@@ -152,7 +158,25 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
   }
 
   @Override
+  public String toString() {
+    final StringBuilder sb = new StringBuilder(10 + 10 * size());
+    sb.append(getClass());
+    sb.append(": [");
+    for (final K o : keySet()) {
+      sb.append(get(o).toString());
+      sb.append(' ');
+    }
+    sb.append(']');
+    return sb.toString();
+  }
+
+  @Override
   public Collection<V> values() {
-    throw new UnsupportedOperationException("TODO");
+    final ArrayList<V> ret = new ArrayList<V>(size());
+    System.out.println(entrySet().getClass().toString());
+    final Iterator<Entry<K, V>> it  = entrySet().iterator();
+    while (it.hasNext())
+      ret.add(it.next().getValue());
+    return ret;
   }
 }

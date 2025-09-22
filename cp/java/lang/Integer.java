@@ -26,7 +26,7 @@ public final class Integer extends Number implements Comparable<Integer> {
   }
 
   public static int reverseBytes(final int i) {
-    return i&0xff000000>>24|i&0xff0000>>8|i&0xff00<<8|i&0xff<<24;
+    return i & 0xff000000 >> 24 | i & 0xff0000 >> 8 | i & 0xff00 << 8 | i & 0xff << 24;
   }
 
   public static String toString(final int val) {
@@ -62,7 +62,6 @@ public final class Integer extends Number implements Comparable<Integer> {
   public int intValue() {
     return value;
   }
-
 
   @Override
   public long longValue() {

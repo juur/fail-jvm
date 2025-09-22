@@ -1,10 +1,26 @@
 #define _XOPEN_SOURCE 700
+#if defined(DEBUG) || defined (DEBUG_CODE)
+#define NDEBUG
+#else
 #undef NDEBUG
+#endif
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 #define ERR_AT  __FILE__ ":" TOSTRING(__LINE__)
 #define STRING_TOO_LONG() warnx("snprintf truncation:" ERR_AT)
+
+#ifdef DEBUG_CODE
+#define dbg_cprintf(...) printf(__VA_ARGS__)
+#else
+#define dbg_cprintf(...)
+#endif
+
+#ifdef DEBUG
+#define dbg_printf(...) printf(__VA_ARGS__)
+#else
+#define dbg_printf(...)
+#endif
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -23,67 +39,106 @@
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <ctype.h>
 #include <fcntl.h>
 
-/* macros etc */
-#define COLOUR
-#ifdef COLOUR
-#define ANSI_INSTR  "\x1b[1;32m"
-#define ANSI_BRED   "\x1b[1;31m"
-#define ANSI_BYEL   "\x1b[1;33m"
-#define ANSI_BMAG   "\x1b[1;35m"
-#define ANSI_RESET  "\x1b[0m"
-#else
-#define ANSI_INSTR  ""
-#define ANSI_BRED   ""
-#define ANSI_BYEL   ""
-#define ANSI_BMAG   ""
-#define ANSI_RESET  ""
+#include "fail-jvm.h"
+
+/*
+ * Forward function declarations
+ */
+
+#ifdef DEBUG
+__attribute__((nonnull)) static void dumpAttribute(const attribute_info *ai);
+#endif
+__attribute__((nonnull)) static Object *getClassObject(Thread *, ClassFile *, bool);
+__attribute__((nonnull)) static int32_t getLine(const Frame *fr);
+__attribute__((nonnull)) static bool linkCpString(Thread *, cp_info *);
+__attribute__((nonnull)) static bool fixupCpString(Thread *, cp_info *, cp_info **, uint16_t);
+__attribute__((nonnull)) static bool linkClass(Thread *, ClassFile *);
+__attribute__((nonnull)) static Operand *newStringFromChar(Thread *, const Object *, Object **);
+__attribute__((nonnull)) static field_info *findClassFieldForClass(Thread *, ClassFile *, const char *);
+__attribute__((nonnull)) static bool isClassLoaded(Thread *, const char *);
+__attribute__((nonnull)) static void freeClass(JVM *jvm, ClassFile *cf);
+__attribute__((nonnull)) static bool freeObject(JVM *jvm, Object *o);
+__attribute__((nonnull)) static Operand *newString(Thread *, const char *, Object **);
+__attribute__((nonnull)) static bool fixupCpUtf8(cp_info *);
+__attribute__((nonnull(1,2))) static ClassFile *findClass2(Thread *, const char *, bool, Object *);
+__attribute__((nonnull(1))) static Operand *throw(Thread *, const char *, const char *, int64_t pc);
+__attribute__((nonnull)) static bool freeThread(Thread *restrict const t);
+__attribute__((nonnull)) static Operand *startThread(Thread *);
+__attribute__((malloc(freeThread,1),nonnull(1))) static Thread *newThread(JVM *, Object *);
+__attribute__((nonnull(1,2))) static ClassFile *loadClass(Thread *, const char *, Object *);
+__attribute__((nonnull(1))) static Object *newArray(Thread *, uint8_t, int32_t, const ClassFile *);
+__attribute__((malloc(freeObject,2),nonnull(1,3))) static Object *newMultiArray(Thread *thread, uint8_t type, int32_t *sizes, uint8_t dim, const ClassFile *clsType);
+__attribute__((malloc(freeObject,2))) static Object *newObject(Thread *, const ClassFile *const);
+__attribute__((nonnull)) static uint32_t freeOperand(Operand *);
+__attribute__((malloc(freeOperand,1))) static Operand *dupOperand(const Operand *);
+__attribute__((malloc(freeOperand,1))) static Operand *newOperand(uint8_t, const void *);
+__attribute__((nonnull(1,2))) static bool addClass(Thread *, ClassFile *, Object *);
+__attribute__((nonnull(1,2))) static ClassFile *findClass(Thread *, const char *, Object *);
+__attribute__((nonnull)) static method_info *findClassMethod(Thread *, const char *, const char *, const char *, invoke_t);
+__attribute__((nonnull(1,3,4))) static method_info *findMethodByClass(Thread *, const ClassFile *, const char *, const char *, invoke_t);
+__attribute__((nonnull)) static Operand *classInit(Thread *, ClassFile *cls);
+__attribute__((nonnull)) static uint32_t freeAndNullOperand(Operand **o);
+__attribute__((nonnull)) static Operand *invokeMethod(Thread *, method_info *, bool, int64_t, invoke_t);
+__attribute__((nonnull(1,2))) static Object *createClass(Thread *, ClassFile *, Object *);
+__attribute__((nonnull)) static bool getObjectFieldValue(const Object *obj, const char *name, void *out);
+__attribute__((nonnull(1))) static ClassFile *createClassForArray(Thread *thread, const uint8_t type, const uint8_t dim, const ClassFile *compClass);
+__attribute__((malloc(freeClass,2),nonnull)) static ClassFile *parseClass(Thread *, FILE *, const char *, Object *);
+
+#ifdef DEBUG
+static void dumpClass(const ClassFile *);
+static const char *printObject(const Object *o);
+#endif
+#ifdef DEBUG
+static void dumpFrame(const Frame *f);
+static void dumpStack(const Frame *frame, const char *op);
+static void disasm(const uint8_t *const code, uint32_t len);
 #endif
 
-/* access flags */
 
-#define ACC_PUBLIC      ((unsigned)0x0001)
-#define ACC_PRIVATE     ((unsigned)0x0002)
-#define ACC_PROTECTED   ((unsigned)0x0004)
-#define ACC_STATIC      ((unsigned)0x0008)
-#define ACC_FINAL       ((unsigned)0x0010)
-#define ACC_SUPER       ((unsigned)0x0020)
-#define ACC_SYNCH       ((unsigned)0x0020)
-#define ACC_VOLATILE    ((unsigned)0x0040)
-#define ACC_BRIDGE      ((unsigned)0x0040)
-#define ACC_TRANSIENT   ((unsigned)0x0080)
-#define ACC_NATIVE      ((unsigned)0x0100)
-#define ACC_INTERFACE   ((unsigned)0x0200)
-#define ACC_ABSTRACT    ((unsigned)0x0400)
-#define ACC_STRICT      ((unsigned)0x0800)
-#define ACC_SYNTHETIC   ((unsigned)0x1000)
-#define ACC_ANNOTATION  ((unsigned)0x2000)
-#define ACC_ENUM        ((unsigned)0x4000)
+/*
+ * Constants
+ */
 
-#define TYPE_BYTE       ((char)'B')
-#define TYPE_CHAR       ((char)'C')
-#define TYPE_DOUBLE     ((char)'D')
-#define TYPE_FLOAT      ((char)'F')
-#define TYPE_INT        ((char)'I')
-#define TYPE_LONG       ((char)'J')
-#define TYPE_OREF       ((char)'L')
-#define TYPE_AREF       ((char)'[')
-#define TYPE_SHORT      ((char)'S')
-#define TYPE_BOOL       ((char)'Z')
-#define TYPE_VOID       ((char)'V')
-#define TYPE_NULL       ((char)'N')
-#define TYPE_RETADDR    ((char)'\r')
+#ifdef DEBUG
+static const char *const invokeTypes[] = {
+    [INVOKE_VIRTUAL]   = "INVOKE_VIRTUAL",
+    [INVOKE_STATIC]    = "INVOKE_STATIC",
+    [INVOKE_INTERFACE] = "INVOKE_INTERFACE",
+    [INVOKE_SPECIAL]   = "INVOKE_SPECIAL",
+    NULL,
+};
+#endif
 
-#define T_BOOLEAN   ((int)4)
-#define T_CHAR      ((int)5)
-#define T_FLOAT     ((int)6)
-#define T_DOUBLE    ((int)7)
-#define T_BYTE      ((int)8)
-#define T_SHORT     ((int)9)
-#define T_INT       ((int)10)
-#define T_LONG      ((int)11)
-#define T_MAX       ((int)12)
+static const struct predefinedAttribute predefinedAttrs[9] = {
+    {ATTR_CONSTANT_VALUE,   "ConstantValue",    sizeof(ConstantValue_attribute)},
+    {ATTR_CODE,             "Code",             sizeof(Code_attribute)},
+    {ATTR_STACKMAPTABLE,    "StackMapTable",    sizeof(StackMapTable_attribute)},
+    {ATTR_EXCEPTIONS,       "Exceptions",       sizeof(Exceptions_attribute)},
+    {ATTR_BOOTSTRAPMETHODS, "BootstrapMethods", sizeof(BootstrapMethods_attribute)},
+    {ATTR_INNERCLASSES,     "InnerClasses",     sizeof(InnerClasses_attribute)},
+    {ATTR_SOURCEFILE,       "SourceFile",       sizeof(SourceFile_attribute)},
+    {ATTR_LINENUMBERTABLE,  "LineNumberTable",  sizeof(LineNumberTable_attribute)},
+    {0, NULL, 0},
+};
+
+static const char *const search[] = {
+    "java",
+    "java/lang",
+    "java/lang/annotation",
+    "java/lang/reflect",
+    "java/math"
+    "java/io",
+    "java/nio",
+    "java/nio/channels",
+    "java/text",
+    "java/util",
+    "fail",
+    "test",
+    NULL
+};
 
 static const uint8_t atypemap[T_MAX] = {
     /*  0, 0, 0, 0,
@@ -105,619 +160,18 @@ static const uint8_t atypemap[T_MAX] = {
     TYPE_LONG
 };
 
-/*
- * Constant Pool
- */
 
-/* value of .tag */
+#if 0
+static ClassFile *buildInternalClass(internalClass *ic);
+#endif
 
-#define CONSTANT_Class              ((uint8_t)7)
-#define CONSTANT_Double             ((uint8_t)6)
-#define CONSTANT_Fieldref           ((uint8_t)9)
-#define CONSTANT_Float              ((uint8_t)4)
-#define CONSTANT_Integer            ((uint8_t)3)
-#define CONSTANT_InterfaceMethodref ((uint8_t)11)
-#define CONSTANT_InvokeDynamic      ((uint8_t)18)
-#define CONSTANT_Long               ((uint8_t)5)
-#define CONSTANT_MethodHandle       ((uint8_t)15)
-#define CONSTANT_MethodType         ((uint8_t)16)
-#define CONSTANT_Methodref          ((uint8_t)10)
-#define CONSTANT_NameAndType        ((uint8_t)12)
-#define CONSTANT_String             ((uint8_t)8)
-#define CONSTANT_Utf8               ((uint8_t)1)
-
-struct _cp_info;
-
-typedef struct _cp_Utf8_info {
-    uint16_t     length;
-    uint16_t     utf16len;
-    uint16_t    *utf16;
-    char        *ascii;
-    uint8_t     *bytes;
-} cp_Utf8_info;
-
-typedef struct _cp_MethodType_info {
-    uint16_t    descriptor_index;
-} cp_MethodType_info;
-
-typedef struct _cp_MethodHandle_info {
-    uint8_t     reference_kind;
-    uint16_t    reference_index;
-} cp_MethodHandle_info;
-
-typedef struct _cp_NameAndType_info {
-    uint16_t    name_index;
-    uint16_t    descriptor_index;
-
-    struct _cp_info *name;
-    struct _cp_info *descriptor;
-
-    //const char      *original_name;
-    //const char      *original_descriptor;
-} cp_NameAndType_info;
-
-typedef struct _cp_InvokeDynamic_info {
-    uint16_t    bootstrap_method_attr_index;
-    uint16_t    name_and_type_index;
-} cp_InvokeDynamic_info;
-
-typedef struct _cp_Long_info {
-    int64_t c_long;
-} cp_Long_info;
-
-typedef struct _cp_Integer_info {
-    int32_t c_int;
-} cp_Integer_info;
-
-typedef struct _cp_Double_info {
-    double      c_double;
-} cp_Double_info;
-
-typedef struct _cp_Float_info {
-    float       c_float;
-} cp_Float_info;
-
-typedef struct _cp_String_info {
-    uint16_t    string_index;
-
-    /* char[] */
-    struct _Object *intern;
-    struct _cp_info      *string;
-} cp_String_info;
-
-typedef struct _cp_Class_info {
-    uint16_t    name_index;
-
-    struct _cp_info *name;
-    //const char      *original_name;
-} cp_Class_info;
-
-
-/* Actually covers both Fieldref_info and Methodref_info */
-typedef struct _cp_Fieldref_info {
-    uint16_t    class_index;
-    uint16_t    name_and_type_index;
-
-    struct _cp_info *class;
-    struct _cp_info *nametype;
-} cp_Fieldref_info;
-
-typedef struct _cp_info {
-    uint8_t tag;
-
-    union {
-        cp_Utf8_info            utf8;
-        cp_MethodHandle_info    mh;
-        cp_MethodType_info      mt;
-        cp_NameAndType_info     nt;
-        cp_InvokeDynamic_info   id;
-        cp_Long_info            tlong;
-        cp_Integer_info         tint;
-        cp_Float_info           tfloat;
-        cp_Double_info          tdouble;
-        cp_String_info          str;
-        cp_Class_info           class;
-        cp_Fieldref_info        fr;
-    } d;
-} cp_info;
-
-/*
- * attribute_info
- */
-
-enum std_attr_e {
-    ATTR_INVALID=0,
-    ATTR_CONSTANT_VALUE,
-    ATTR_CODE,
-    ATTR_STACKMAPTABLE,
-    ATTR_EXCEPTIONS,
-    ATTR_BOOTSTRAPMETHODS,
-    ATTR_INNERCLASSES,
-    ATTR_SOURCEFILE,
-    ATTR_LINENUMBERTABLE
-};
-
-struct predefinedAttribute {
-    enum std_attr_e  attr;
-    const char      *name;
-    size_t           size;
-};
-
-struct _ClassFile;
-
-typedef struct _line_number {
-    uint16_t    start_pc;
-    uint16_t    end_pc;
-    uint16_t    line_number;
-} line_number_t;
-
-typedef struct _LineNumberTable_attribute {
-    uint16_t          line_number_table_length;
-    line_number_t    *line_number_table;
-} LineNumberTable_attribute;
-
-typedef struct _inner_class_def {
-    uint16_t    inner_class_info_index;
-    uint16_t    outer_class_info_index;
-    uint16_t    inner_name_index;
-    uint16_t    inner_class_access_flags;
-
-    cp_info         *inner_ci;
-    cp_info         *outer_ci;
-    struct _ClassFile   *inner_class;
-    cp_info         *inner_name;
-} inner_class_def;
-
-typedef struct _InnerClasses_attribute {
-    uint16_t          number_of_classes;
-    inner_class_def **classes;
-} InnerClasses_attribute;
-
-typedef struct _SourceFile_attribute {
-    uint16_t         sourcefile_index;
-    cp_info *name;
-} SourceFile_attribute;
-
-typedef struct _Exceptions_attribute {
-    uint16_t          number_of_exceptions;
-    cp_info **exception_index_table;
-} Exceptions_attribute;
-
-typedef union _OperandValue {
-    struct _Object  *vref;
-    int64_t          vlong;
-    int32_t          vint;
-    int8_t           vbyte;
-    double           vdouble;
-    float            vfloat;
-    int16_t          vshort;
-    bool             vbool;
-    uint16_t         vchar;
-    uint32_t         vretaddr;
-} OperandValue;
-
-typedef struct _Operand {
-    uint8_t         type;
-    OperandValue    val;
-    bool            freed;
-} Operand;
-
-typedef struct _ConstantValue_attribute {
-    uint16_t         constantvalue_index;
-    cp_info *entry;
-    Operand          op;
-} ConstantValue_attribute;
-
-typedef struct _bootstrap_method {
-    uint16_t         bootstrap_method_ref;
-    uint16_t         num_bootstrap_arguments;
-    uint16_t    *bootstrap_arguments;
-} bootstrap_method;
-
-typedef struct _BootstrapMethods_attribute {
-    uint16_t                  num_bootstrap_methods;
-    bootstrap_method    **bootstrap_methods;
-} BootstrapMethods_attribute;
-
-typedef struct _exception {
-    uint16_t start_pc;
-    uint16_t end_pc;
-    uint16_t handler_pc;
-    uint16_t catch_type_idx;
-
-    cp_info *catch_type;
-} exception;
-
-struct _attribute_info;
-
-typedef struct _Code_attribute {
-    uint16_t          max_stack;
-    uint16_t          max_locals;
-    uint32_t          code_length;
-    uint8_t  *code;
-    uint16_t          exception_table_length;
-    exception   **exception_table;
-    uint16_t          attributes_count;
-
-    struct _method_info      *method;
-    struct _attribute_info  **attributes;
-    LineNumberTable_attribute    *lineno;
-} Code_attribute;
-
-typedef struct _Object_variable_info {
-    uint8_t     tag;
-    uint16_t    cpool_index;
-} Object_variable_info;
-
-typedef struct _Uninitialized_variable_info {
-    uint8_t     tag;
-    uint16_t    offset;
-} Uninitialized_variable_info;
-
-typedef struct _Basic_variable_info {
-    uint8_t     tag;
-} Basic_variable_info;
-
-union verification_type_info {
-    Object_variable_info        ovi;
-    Basic_variable_info         bvi;
-    Uninitialized_variable_info uvi;
-};
-
-typedef struct _chop_frame {
-    uint16_t offset_delta;
-} chop_frame;
-
-typedef struct _append_frame {
-    uint16_t    offset_delta;
-    uint8_t     local_num;
-
-    union verification_type_info **locals;
-} append_frame;
-
-typedef struct _full_frame {
-    uint16_t    offset_delta;
-    uint16_t    number_of_locals;
-    uint16_t    number_of_stack_items;
-
-    union verification_type_info **locals;
-    union verification_type_info **stack;
-} full_frame;
-
-typedef struct _same_frame_extended {
-    uint16_t    offset_delta;
-} same_frame_extended;
-
-typedef struct _samelocalsi_frame {
-    union verification_type_info stack;
-} samelocalsi_frame;
-
-enum frametype_en {
-    FT_NULL = 0,
-    FT_SAME,
-    FT_SAME_LOCALS_1_STACK_ITEM,
-    FT_SAME_LOCALS_1_STACK_ITEM_EXTENDED,
-    FT_CHOP,
-    FT_SAME_FRAME_EXTENDED,
-    FT_APPEND,
-    FT_FULL_FRAME
-};
-
-typedef struct _stack_map_frame {
-    uint8_t tag;
-    enum    frametype_en type;
-
-    union {
-        chop_frame          cf;     // FT_CHOP
-        append_frame        af;     // FT_APPEND
-        full_frame          ff;     // FT_FULL_FRAME
-        samelocalsi_frame   slsi;   // FT_SAME_LOCALS_1_STACK_ITEM
-        same_frame_extended sfe;    // FT_SAME_FRAME_EXTENDED
-    } i;
-} stack_map_frame;
-
-#define ITEM_Top                ((int)0)
-#define ITEM_Integer            ((int)1)
-#define ITEM_Float              ((int)2)
-#define ITEM_Double             ((int)3)
-#define ITEM_Long               ((int)4)
-#define ITEM_Null               ((int)5)
-#define ITEM_UninitialisedThis  ((int)6)
-#define ITEM_Object             ((int)7)
-#define ITEM_Uninitialised      ((int)8)
-
-typedef struct _StackMapTable_attribute {
-    uint16_t          number_of_entries;
-
-    stack_map_frame **entries;
-} StackMapTable_attribute;
-
-typedef struct _attribute_info {
-    uint16_t         attribute_name_index;
-    uint32_t         attribute_length;
-
-    union {
-        Code_attribute          *code;
-        Exceptions_attribute        *exception;
-        StackMapTable_attribute *stackmap;
-        ConstantValue_attribute *constant;
-        InnerClasses_attribute  *inner;
-        SourceFile_attribute        *srcfile;
-        LineNumberTable_attribute   *lineno;
-        void                        *data;
-    } d;
-
-    cp_info *name;
-
-    /* must be last for unknown attributes */
-    uint8_t  info[];
-} attribute_info;
-
-/* descriptors */
-
-typedef struct _des_Field {
-    uint8_t  baseType;
-    uint8_t  array;
-
-    const char  *className;
-    const char  *orig_className;
-} des_Field;
-
-typedef struct _des_Method {
-    des_Field     ret;
-    uint16_t      num_params;
-
-    des_Field   **params;
-} des_Method;
-
-/* field_info */
-
-struct _Operand;
-
-typedef struct _field_info {
-    uint16_t        access_flags;
-    uint16_t        name_index;
-    uint16_t        descriptor_index;
-    uint16_t        attributes_count;
-
-    attribute_info  **attributes;
-
-    des_Field        desc;
-
-    cp_info *name;
-    cp_info *descriptor;
-    struct _Operand *static_operand;
-    struct _ClassFile       *class;
-} field_info;
-
-/* method_info */
-
-struct _Thread;
-struct _Object;
-
-typedef struct _Operand *(*intStaticMethod)(struct _Thread *,
-        struct _ClassFile *);
-typedef struct _Operand *(*intMethod)(struct _Thread *,
-        struct _ClassFile *,
-        struct _Object *o);
-
-typedef struct _method_info {
-    uint16_t        access_flags;
-    uint16_t        name_index;
-    uint16_t        descriptor_index;
-    uint16_t        attributes_count;
-
-    des_Method       desc;
-
-    struct _ClassFile    *class;
-    attribute_info  **attributes;
-    cp_info          *name;
-    //const char       *original_name;
-    cp_info          *descriptor;
-    //const char       *original_descriptor;
-    union {
-        intStaticMethod mstatic;
-        intMethod       mvirtual;
-    } nativeMethod;
-    Exceptions_attribute    *exceptions;
-    Code_attribute      *code;
-} method_info;
-
-/* ClassFile */
-
-struct _Object;
-
-typedef struct _ClassFile {
-    uint32_t      magic;
-    uint16_t      minor_version;
-    uint16_t      major_version;
-    uint16_t      constant_pool_count;
-    cp_info     **constant_pool;
-    uint16_t      access_flags;
-    uint16_t      this_class_idx;
-    uint16_t      super_class_idx;
-    uint16_t      interfaces_count;
-    uint16_t     *interfaces;
-    cp_info     **interface_class;
-    uint16_t      fields_count;
-    field_info  **fields;
-    uint16_t      methods_count;
-    method_info **methods;
-    uint16_t      attributes_count;
-    attribute_info **attributes;
-
-    cp_info      *this_class;
-    cp_info      *super_class;
-    cp_info      *srcfile;
-    const char   *super_name;
-    //const char   *canonical_name;
-    //const char   *original_name;
-    bool          isInit;
-    int32_t       heaploc;
-    bool          isLinked;
-    bool          isInnerClass;
-
-    struct _Object   *class_object;
-
-    pthread_rwlock_t      rwlock;
-} ClassFile;
-
-/* Object */
-
-typedef struct _Field {
-    Operand             *op;
-    field_info  *field_info;
-} Field;
-
-#define OBJ_CLASS   ((uint8_t)1)
-#define OBJ_ARRAY   ((uint8_t)2)
-
-typedef struct _Object {
-    uint8_t  type;
-    uint32_t lock;
-    int32_t  heaploc;
-
-    pthread_mutex_t  monitor;
-    const ClassFile *class;
-    struct _Object  *class_obj;
-
-    /* place other common to both array & object things above here */
-
-    /* things not common in this union */
-    union {
-        struct {
-            uint16_t  num_fields;
-            Field    *fields;
-            void     *native_data;
-            void     (*native_free)(void *);
-        } obj;
-        struct {
-            uint8_t           type;
-            uint8_t           dimensions;
-            uint32_t          len;
-            int32_t          *sizes;
-            struct _Operand **data;
-        } array;
-    } data;
-    char *className;
-} Object;
+/* global variables */
 
 static uint16_t framecounter = 0;
 
-typedef struct _Frame {
-    uint16_t      frameNum;
-    uint16_t      sp;
-    uint16_t      num_local;
-    uint16_t      num_stack;
-    uint32_t      pc;
-    Operand      *ret;
-    Operand     **local;
+static const char *opt_classpath = "cp";
 
-    ClassFile          *class;
-    const method_info  *mi;
-    Operand           **stack;
-} Frame;
-
-typedef enum _th_state_en {
-    TH_NEW,
-    TH_RUNNING,
-    TH_FINISHED,
-    TH_DEAD
-} th_state_en;
-
-#define MAX_THREADS ((unsigned)16)
-#define MAX_STACK   ((unsigned)512)
-#define MAX_HEAP    ((unsigned)32768)
-#define DEF_HEAP    ((unsigned)128)
-#define MAX_METHOD  ((unsigned)128)
-
-typedef struct _Thread {
-    Frame           *stack[MAX_STACK];
-    Object          *thread;
-    uint32_t         pc;
-    uint32_t         frame_free;
-    pthread_t        pthread;
-    uint16_t         thread_id;
-    th_state_en      state;
-
-    pthread_rwlock_t     rwlock;
-    struct _JVM *jvm;
-    const method_info   *cur_method;
-} Thread;
-
-typedef struct _JVM {
-    pthread_rwlock_t    rwlock;
-
-    bool       VM;
-    bool       ClassInit;
-    bool       primUp;
-    uint16_t   maxHeap;
-    Thread    *cur_thread;
-    Object    **heap;
-    ClassFile *method_area[MAX_METHOD];
-    Thread    *threads[MAX_THREADS];
-} JVM;
-
-/* hard coded classes */
-
-#define MAX_FIELDS      ((unsigned)16)
-#define MAX_METHODS     ((unsigned)16)
-#define MAX_INTERFACES  ((unsigned)16)
-
-typedef struct _internalField {
-    const char *name;
-    const char *desc;
-    uint16_t access;
-} internalField;
-
-typedef struct _internalMethod {
-    const char      *name;
-    const char      *desc;
-    const uint16_t   access;
-    union {
-        intStaticMethod mstatic;
-        intMethod       mvirtual;
-    } meth;
-} internalMethod;
-
-typedef struct _internalClass {
-    const char *super;
-    const char *name;
-    const bool override;
-    const uint16_t access;
-    internalField fields[MAX_FIELDS];
-    internalMethod methods[MAX_METHODS];
-    const char *interfaces[MAX_INTERFACES];
-} internalClass;
-
-typedef struct _prim_class_map {
-    const char   type;
-    const char  *c_name;
-    Object      *class;
-} prim_class_map_t;
-
-typedef struct _ary_map {
-    const char  *canonical;
-    Object      *object;
-} ary_map_t;
-
-/*
- * Constants
- */
-
-static const struct predefinedAttribute predefinedAttrs[] = {
-    {ATTR_CONSTANT_VALUE,   "ConstantValue",    sizeof(ConstantValue_attribute)},
-    {ATTR_CODE,             "Code",             sizeof(Code_attribute)},
-    {ATTR_STACKMAPTABLE,    "StackMapTable",    sizeof(StackMapTable_attribute)},
-    {ATTR_EXCEPTIONS,       "Exceptions",       sizeof(Exceptions_attribute)},
-    {ATTR_BOOTSTRAPMETHODS, "BootstrapMethods", sizeof(BootstrapMethods_attribute)},
-    {ATTR_INNERCLASSES,     "InnerClasses",     sizeof(InnerClasses_attribute)},
-    {ATTR_SOURCEFILE,       "SourceFile",       sizeof(SourceFile_attribute)},
-    {ATTR_LINENUMBERTABLE,  "LineNumberTable",  sizeof(LineNumberTable_attribute)},
-    {0, NULL, 0},
-};
-
-static prim_class_map_t primitiveClassMap[] = {
+static prim_class_map_t primitiveClassMap[10] = {
     {TYPE_INT,      "java.lang.Integer",    NULL},
     {TYPE_CHAR,     "java.lang.Character",  NULL},
     {TYPE_BOOL,     "java.lang.Boolean",    NULL},
@@ -731,76 +185,31 @@ static prim_class_map_t primitiveClassMap[] = {
     {0, NULL, NULL}
 };
 
-/*
- * Forward function declarations
- */
 
-static Object *getClassObject(Thread *, ClassFile *);
-static bool linkCpString(Thread *, cp_info *);
-static bool fixupCpString(Thread *, cp_info *, cp_info **, uint16_t);
-static bool linkClass(Thread *, ClassFile *);
-static Operand *newStringFromChar(Thread *, const Object *, Object **);
-static field_info *findClassFieldForClass(Thread *, ClassFile *, const char *);
-static bool isClassLoaded(Thread *, const char *);
-static void freeClass(JVM *jvm, ClassFile *cf);
-static bool freeObject(JVM *jvm, Object *o);
-static Operand *newString(Thread *, const char *, Object **);
-static bool fixupCpUtf8(cp_info *);
-static ClassFile *findClass2(Thread *, const char *, bool);
-static Operand *throw(Thread *, const char *, const char *, int64_t pc);
-static Operand *startThread(Thread *);
-static Thread *newThread(JVM *, Object *);
-static ClassFile *loadClass(Thread *, const char *);
-static Object *newArray(Thread *, uint8_t, int32_t, const ClassFile *);
-static Object *newMultiArray(Thread *thread, uint8_t type, int32_t *sizes, uint8_t dim, const ClassFile *clsType);
-static Object *newObject(Thread *, const ClassFile *const);
-static Operand *dupOperand(const Operand *);
-static Operand *newOperand(uint8_t, const void *);
-static bool addClass(Thread *, ClassFile *);
-static ClassFile *findClass(Thread *, const char *);
-static method_info *findClassMethod(Thread *, const char *, const char *, const char *);
-static method_info *findMethodByClass(Thread *, const ClassFile *, const char *, const char *);
-static Operand *classInit(Thread *, ClassFile *cls);
-static uint32_t freeAndNullOperand(Operand **o);
-static uint32_t freeOperand(Operand *);
-static Operand *invokeMethod(Thread *, const method_info *, bool, int64_t);
-static Object *createClass(Thread *, ClassFile *);
-
-#ifdef DEBUG
-static void dumpClass(const ClassFile *);
-#endif
-#ifdef DEBUG_CODE
-static const char *printObject(const Object *o);
-static void dumpFrame(const Frame *f);
-static void dumpStack(const Frame *frame, const char *op);
-static void disasm(const uint8_t *const code, uint32_t len);
-#endif
-
-#if 0
-static ClassFile *buildInternalClass(internalClass *ic);
-#endif
 
 /*
  * Inline function defintions
  */
 
-/*
-   static int max(const int a, const int b)
-   {
-   return a < b ? b : a;
-   }
-   */
-
-static unsigned int umax(unsigned int a, unsigned int b)
+static inline unsigned int umax(unsigned int a, unsigned int b)
 {
     return a < b ? b : a;
 }
 
-static Frame *currentFrame(Thread * thread)
+__attribute__((nonnull))
+static inline Frame *currentFrame(Thread * thread)
 {
     if (thread->frame_free == 0) return NULL;
     return thread->stack[thread->frame_free-1];
 }
+
+__attribute__((nonnull))
+static inline const char *getClassName(const cp_info *const cls) {
+    if (cls->class.name != NULL && cls->class.name->utf8.ascii != NULL)
+        return cls->class.name->utf8.ascii;
+    return "<null>";
+}
+
 
 /*
  * Function defintions
@@ -817,8 +226,8 @@ static const char *printOpType(uint8_t type)
         case TYPE_CHAR:     return "char";          break;
         case TYPE_DOUBLE:   return "double";        break;
         case TYPE_FLOAT:    return "float";         break;
-        case TYPE_OREF:     return "reference (L)"; break;
-        case TYPE_AREF:     return "reference ([)"; break;
+        case TYPE_OREF:     return "oreference (L)"; break;
+        case TYPE_AREF:     return "areference ([)"; break;
         case TYPE_SHORT:    return "short";         break;
         case TYPE_BOOL:     return "bool";          break;
         case TYPE_VOID:     return "void";          break;
@@ -834,21 +243,19 @@ static const char *printOpType(uint8_t type)
 }
 
 #define BT_SIZE 200
-#ifdef DEBUG_CODE
-//static void *bt_buffer[BT_SIZE];
-#endif
 static const char *printOpValue(const Operand *op);
 
+__attribute__((nonnull))
 static char *printArray(const Object *o)
 {
     static char buf[BUFSIZ/2];
     FILE *bfp = fmemopen(buf, sizeof(buf), "w");
 
-    for(uint32_t i = 0; i < o->data.array.len; i++)
+    for(uint32_t i = 0; i < o->array.len; i++)
     {
-        if (o->data.array.data[i])
-            fprintf(bfp, "%s", printOpValue(o->data.array.data[i]));
-        if (o->data.array.type != TYPE_CHAR && i + 1 < o->data.array.len)
+        if (o->array.data[i])
+            fprintf(bfp, "%s", printOpValue(o->array.data[i]));
+        if (o->array.type != TYPE_CHAR && i + 1 < o->array.len)
             fprintf(bfp, ",");
     }
 
@@ -881,11 +288,13 @@ static const char *printOpValue(const Operand *op)
         case TYPE_CHAR:     snprintf(buf, sizeof(buf), "%c", op->val.vchar); break;
         case TYPE_DOUBLE:   snprintf(buf, sizeof(buf), "%d", (int)op->val.vdouble); break; // FIXME printf
         case TYPE_FLOAT:    snprintf(buf, sizeof(buf), "%d", (int)op->val.vfloat); break; // FIXME printf
-        case TYPE_OREF:     snprintf(buf, sizeof(buf), "%s",
-                                    op->val.vref->class->this_class->d.class.name ? op->val.vref->class->this_class->d.class.name->d.utf8.ascii
-                                    : "<null class name>"); break;
+        case TYPE_OREF:     snprintf(buf, sizeof(buf), "%s @ %p",
+                                    (op->val.vref->class && op->val.vref->class->this_class->class.name )
+                                    ? getClassName(op->val.vref->class->this_class)
+                                    : "<null class name>",
+                                    (void *)op->val.vref); break;
         case TYPE_AREF:     snprintf(buf, sizeof(buf), "%s:%s",
-                                    printOpType(op->val.vref->data.array.type),
+                                    printOpType(op->val.vref->array.type),
                                     printArray(op->val.vref)); break;
         case TYPE_SHORT:    snprintf(buf, sizeof(buf), "%d", op->val.vshort); break;
         case TYPE_BOOL:     snprintf(buf, sizeof(buf), "%d", op->val.vbool); break;
@@ -900,7 +309,7 @@ static const char *printOpValue(const Operand *op)
     return buf;
 }
 
-#ifdef DEBUG_CODE
+#ifdef DEBUG
 static void dumpStack(const Frame *const frame, const char *op)
 {
     if (!frame->sp) {
@@ -923,9 +332,9 @@ static void dumpStack(const Frame *const frame, const char *op)
 }
 #endif
 
-static bool push(Frame *const frame, const Operand *op)
+__attribute__((nonnull))
+static inline bool push(Frame *const frame, const Operand *op)
 {
-    assert(op != 0);
     assert(op->type != 0);
 
     if (frame->sp >= frame->num_stack)
@@ -935,13 +344,28 @@ static bool push(Frame *const frame, const Operand *op)
     return true;
 }
 
-__attribute__((pure)) static Operand *peek(Frame *const frame)
+__attribute__((pure, nonnull))
+static inline Operand *peeknth(const Frame *const frame, int pos)
 {
-	assert(frame->sp > 0);
-	return frame->stack[frame->sp - 1];
+    if (frame->sp == 0)
+        return NULL;
+    if ((frame->sp - pos - 1) > frame->sp)
+        return NULL;
+
+    return frame->stack[frame->sp - pos - 1];
 }
 
-static Operand *pop(Frame *frame)
+__attribute__((pure, nonnull))
+static inline Operand *peek(const Frame *const frame)
+{
+    if (frame->sp == 0)
+        return NULL;
+
+    return frame->stack[frame->sp - 1];
+}
+
+__attribute__((nonnull))
+static inline Operand *pop(Frame *frame)
 {
     assert(frame->sp > 0);
 
@@ -951,7 +375,8 @@ static Operand *pop(Frame *frame)
     return ret;
 }
 
-__attribute__((pure)) static Operand *getLocal(Frame *const frame, uint16_t slot)
+__attribute__((pure))
+static inline Operand *getLocal(const Frame *const frame, uint16_t slot)
 {
     assert(slot < frame->num_local);
 
@@ -1013,25 +438,26 @@ static void printAccessFlags(uint16_t flag, char *const buf, size_t len)
     //return buf;
 }
 
-static bool read4(FILE *f, uint32_t *dst)
+__attribute__((nonnull))
+static bool read4(FILE *const f, uint32_t *const dst)
 {
-    size_t ret;
-    if ( (ret = fread(dst, 1, sizeof(uint32_t), f)) != sizeof(uint32_t)) {
-        warn("read4 %ld", ret);
+    if ( (fread(dst, 1, sizeof(uint32_t), f)) != sizeof(uint32_t))
         return false;
-    }
+
     *dst = ntohl(*dst);
     return true;
 }
 
-static bool read2(FILE *f, uint16_t *dst)
+__attribute__((nonnull))
+static bool read2(FILE *const f, uint16_t *const dst)
 {
     if ( (fread(dst, 1, sizeof(uint16_t), f)) != sizeof(uint16_t)) return false;
     *dst = ntohs(*dst);
     return true;
 }
 
-static bool read1(FILE *f, uint8_t *dst)
+__attribute__((nonnull))
+static bool read1(FILE *const f, uint8_t *const dst)
 {
     if ( (fread(dst, 1, sizeof(uint8_t), f)) != sizeof(uint8_t)) return false;
     return true;
@@ -1047,7 +473,8 @@ static Object *findObjForPrim(uint8_t type)
     return NULL;
 }
 
-static cp_info *readConstantPool(FILE *f)
+__attribute__((nonnull))
+static cp_info *readConstantPool(FILE *const f)
 {
     uint8_t tag;
     uint32_t tmp;
@@ -1061,29 +488,29 @@ static cp_info *readConstantPool(FILE *f)
         case CONSTANT_Class:
             if ((ret = calloc(1, sizeof(cp_info))) == NULL) return NULL;
             ret->tag = tag;
-            if (!read2(f, &ret->d.class.name_index)) goto fail;
+            if (!read2(f, &ret->class.name_index)) goto fail;
             break;
 
         case CONSTANT_Fieldref:
         case CONSTANT_Methodref:
         case CONSTANT_InterfaceMethodref:
             if ((ret = calloc(1, sizeof(cp_info))) == NULL) return NULL;
-            if (!read2(f, &ret->d.fr.class_index)) goto fail;
-            if (!read2(f, &ret->d.fr.name_and_type_index))
+            if (!read2(f, &ret->fr.class_index)) goto fail;
+            if (!read2(f, &ret->fr.name_and_type_index))
                 goto fail;
             break;
 
         case CONSTANT_String:
             if ((ret = calloc(1, sizeof(cp_info))) == NULL)
                 return NULL;
-            if (!read2(f, &ret->d.str.string_index)) goto fail;
+            if (!read2(f, &ret->str.string_index)) goto fail;
             break;
 
         case CONSTANT_InvokeDynamic:
             if ((ret = calloc(1, sizeof(cp_info))) == NULL)
                 return NULL;
-            if (!read2(f, &ret->d.id.bootstrap_method_attr_index)) goto fail;
-            if (!read2(f, &ret->d.id.name_and_type_index)) goto fail;
+            if (!read2(f, &ret->id.bootstrap_method_attr_index)) goto fail;
+            if (!read2(f, &ret->id.name_and_type_index)) goto fail;
             break;
 
         case CONSTANT_Double:
@@ -1114,29 +541,29 @@ static cp_info *readConstantPool(FILE *f)
                     val = (double)(s * m) * pow(2, e - 1075);
                 }
                 //printf("val = %g\n", val);
-                ret->d.tdouble.c_double = val;
+                ret->tdouble.c_double = val;
             }
             break;
 
         case CONSTANT_Long:
             if ((ret = calloc(1, sizeof(cp_info))) == NULL) return NULL;
             if (!read4(f, &tmp)) goto fail;
-            ret->d.tlong.c_long = ((int64_t)tmp) << 32;
+            ret->tlong.c_long = ((int64_t)tmp) << 32;
             if (!read4(f, &tmp)) goto fail;
-            ret->d.tlong.c_long += tmp;
+            ret->tlong.c_long += tmp;
             break;
 
         case CONSTANT_Utf8:
             if (!read2(f, &tmp16)) goto fail;
             if ((ret = calloc(1, sizeof(cp_info))) == NULL)
                 return NULL;
-            ret->d.utf8.length = tmp16;
+            ret->utf8.length = tmp16;
             //if (tmp16 == 0) {
             //  warnx("constant pool is zero length");
             //}
-            if ((ret->d.utf8.bytes = calloc(tmp16 + 1U, sizeof(uint8_t))) == NULL)
+            if ((ret->utf8.bytes = calloc(tmp16 + 1U, sizeof(uint8_t))) == NULL)
                 goto fail;
-            if ((fread(ret->d.utf8.bytes, 1, tmp16, f)) != tmp16)
+            if ((fread(ret->utf8.bytes, 1, tmp16, f)) != tmp16)
                 goto fail;
             fixupCpUtf8(ret);
             break;
@@ -1144,23 +571,23 @@ static cp_info *readConstantPool(FILE *f)
         case CONSTANT_NameAndType:
             if ((ret = calloc(1, sizeof(cp_info))) == NULL)
                 return NULL;
-            if (!read2(f, &ret->d.nt.name_index)) goto fail;
-            if (!read2(f, &ret->d.nt.descriptor_index)) goto fail;
+            if (!read2(f, &ret->nt.name_index)) goto fail;
+            if (!read2(f, &ret->nt.descriptor_index)) goto fail;
             break;
 
         case CONSTANT_MethodHandle:
             if ((ret = calloc(1, sizeof(cp_info))) == NULL)
                 return NULL;
-            if (!read1(f, &ret->d.mh.reference_kind))
+            if (!read1(f, &ret->mh.reference_kind))
                 goto fail;
-            if (!read2(f, &ret->d.mh.reference_index))
+            if (!read2(f, &ret->mh.reference_index))
                 goto fail;
             break;
 
         case CONSTANT_MethodType:
             if ((ret = calloc(1, sizeof(cp_info))) == NULL)
                 return NULL;
-            if (!read2(f, &ret->d.mt.descriptor_index))
+            if (!read2(f, &ret->mt.descriptor_index))
                 goto fail;
             break;
 
@@ -1184,14 +611,14 @@ static cp_info *readConstantPool(FILE *f)
                         (int)((tmp & 0x7FFFFF) | 0x800000);
                     tmpf = (float)(s * m * pow(2, e - 150));
                 }
-                ret->d.tfloat.c_float = tmpf;
+                ret->tfloat.c_float = tmpf;
             }
             break;
 
         case CONSTANT_Integer:
             if ((ret = calloc(1, sizeof(cp_info))) == NULL) return NULL;
             if (!read4(f, &tmp)) goto fail;
-            ret->d.tint.c_int = (int32_t)tmp;
+            ret->tint.c_int = (int32_t)tmp;
 
             //((cp_Integer_info *)ret)->c_int =
             //  ntohl(((cp_Integer_info *)ret)->c_int);
@@ -1207,12 +634,40 @@ fail:
     return NULL;
 }
 
+__attribute__((nonnull))
+static void freeFrame(Frame *f)
+{
+    if (f->local) {
+        for (uint16_t i = 0; i < f->num_local; i++)
+            clearAndFreeLocal(f, i);
+
+        free(f->local);
+        f->local = NULL;
+    }
+
+    if (f->stack) {
+        for (uint16_t i = 0; i < f->num_stack; i++)
+            if (f->stack[i]) {
+                freeAndNullOperand((Operand **)&f->stack[i]);
+            }
+        free(f->stack);
+        f->stack = NULL;
+    }
+
+    if (f->ret) {
+        freeAndNullOperand(&f->ret);
+    }
+
+    free(f);
+}
+
+__attribute__((malloc(freeFrame,1)))
 static Frame *newFrame(uint16_t num_stacks, uint16_t num_locals)
 {
-    Frame *ret = calloc(1, sizeof(Frame));
+    Frame *ret;
 
-    if (ret == NULL) {
-        warn("newFrame");
+    if ((ret = calloc(1, sizeof(Frame))) == NULL) {
+        warn("newFrame: calloc");
         goto fail;
     }
 
@@ -1238,42 +693,12 @@ fail:
         if (ret->stack) free(ret->stack);
         ret->local = ret->stack = NULL;
         free(ret);
-        ret = NULL;
     }
     return NULL;
 }
 
-static void freeFrame(Frame *f)
-{
-#ifdef DEBUG
-//  printf("(freeFrame %p num_local=%d sp=%d\n", (void *)f, f->num_local, f->num_stack);
-#endif
-
-    if (f->local) {
-        for (uint16_t i = 0; i < f->num_local; i++)
-            clearAndFreeLocal(f, i);
-
-        free(f->local);
-        f->local = NULL;
-    }
-
-    if (f->stack) {
-        for (uint16_t i = 0; i < f->num_stack; i++)
-            if (f->stack[i]) {
-                freeAndNullOperand((Operand **)&f->stack[i]);
-            }
-        free(f->stack);
-        f->stack = NULL;
-    }
-
-    if (f->ret) {
-        freeAndNullOperand(&f->ret);
-    }
-
-    free(f);
-}
-
-static exception *readException(uint32_t me, FILE *f, cp_info **cp, uint32_t cpcnt)
+__attribute__((nonnull))
+static exception *readException(uint32_t me, FILE *const f, cp_info **const cp, uint32_t /*cpcnt*/)
 {
     exception *ret = NULL;
     if ((ret = calloc(1, sizeof(exception))) == NULL) return NULL;
@@ -1294,6 +719,7 @@ fail:
 }
 
 #ifdef DEBUG_CODE
+__attribute__((nonnull))
 static void disasm(const uint8_t *const code, uint32_t len)
 {
     const uint8_t *ptr = code;
@@ -1479,7 +905,8 @@ static void disasm(const uint8_t *const code, uint32_t len)
 }
 #endif
 
-static union verification_type_info *readVerificationTypeInfo(FILE *f)
+__attribute__((nonnull))
+static union verification_type_info *readVerificationTypeInfo(FILE *const f)
 {
     uint8_t tag;
     if (!read1(f, &tag))
@@ -1531,14 +958,15 @@ static union verification_type_info *readVerificationTypeInfo(FILE *f)
     return ret;
 }
 
-static attribute_info *readAttribute(Thread *thread, uint32_t me, FILE *f, cp_info **cp, uint32_t cp_cnt)
+__attribute__((nonnull))
+static attribute_info *readAttribute(Thread *const thread, uint32_t me, FILE *const f, cp_info **const cp, uint32_t cp_cnt)
 {
     const JVM *jvm = thread->jvm;
     attribute_info *ret = NULL;
     uint16_t idx;
     uint32_t len;
 
-    if (!read2(f, &idx)) { 
+    if (!read2(f, &idx)) {
         warnx("[%3d] readAttribute: read idx", me);
         return NULL;
     }
@@ -1555,8 +983,8 @@ static attribute_info *readAttribute(Thread *thread, uint32_t me, FILE *f, cp_in
 
     for (int i = 0; ((pa = &predefinedAttrs[i])->name) != NULL; i++)
     {
-        
-        if (strcmp(cp[idx]->d.utf8.ascii, pa->name)) continue;
+
+        if (strcmp(cp[idx]->utf8.ascii, pa->name)) continue;
         switch (pa->attr)
         {
             case ATTR_LINENUMBERTABLE:
@@ -1614,7 +1042,7 @@ static attribute_info *readAttribute(Thread *thread, uint32_t me, FILE *f, cp_in
                     ret->attribute_length = len;
 
                     Code_attribute *attr = calloc(1, pa->size);
-                    if (attr == NULL) { 
+                    if (attr == NULL) {
                         warn("readAttribute: ATTR_CODE: calloc attr");
                         goto fail;
                     }
@@ -1656,7 +1084,7 @@ static attribute_info *readAttribute(Thread *thread, uint32_t me, FILE *f, cp_in
                             warnx("readAttribute: readAttribute on ATTR_CODE failed");
                             goto fail;
                         }
-                        if (!strcmp(attr->attributes[j]->name->d.utf8.ascii, "LineNumberTable"))
+                        if (!strcmp(attr->attributes[j]->name->utf8.ascii, "LineNumberTable"))
                             attr->lineno = attr->attributes[j]->d.lineno;
 
                     }
@@ -1688,28 +1116,30 @@ static attribute_info *readAttribute(Thread *thread, uint32_t me, FILE *f, cp_in
                     {
                         case CONSTANT_Integer:
                             attr->op.type = TYPE_INT;
-                            attr->op.val.vint = attr->entry->d.tint.c_int;
+                            attr->op.val.vint = attr->entry->tint.c_int;
                             break;
                         case CONSTANT_Long:
                             attr->op.type = TYPE_LONG;
-                            attr->op.val.vlong = attr->entry->d.tlong.c_long;
+                            attr->op.val.vlong = attr->entry->tlong.c_long;
                             break;
                         case CONSTANT_Float:
                             attr->op.type = TYPE_FLOAT;
-                            attr->op.val.vfloat = attr->entry->d.tfloat.c_float;
+                            attr->op.val.vfloat = attr->entry->tfloat.c_float;
                             break;
                         case CONSTANT_Double:
                             attr->op.type = TYPE_DOUBLE;
-                            attr->op.val.vdouble = attr->entry->d.tdouble.c_double;
+                            attr->op.val.vdouble = attr->entry->tdouble.c_double;
                             break;
                         case CONSTANT_String:
                             attr->op.type = TYPE_OREF;
                             if (jvm->VM) {
                                 Object *tmp = NULL;
-                                if (attr->entry->d.str.intern == NULL)
+                                if (attr->entry->str.intern == NULL)
                                     linkCpString(thread, (cp_info *)attr->entry);
 
-                                if (newStringFromChar(thread, attr->entry->d.str.intern, &tmp) != NULL) {
+                                attr->op.val.vref = NULL;
+
+                                if (newStringFromChar(thread, attr->entry->str.intern, &tmp) != NULL) {
                                     warnx("readAttribute: newStringFromChar threw something");
                                     goto fail;
                                 }
@@ -1902,6 +1332,32 @@ static attribute_info *readAttribute(Thread *thread, uint32_t me, FILE *f, cp_in
                 }
                 break;
             case ATTR_BOOTSTRAPMETHODS:
+                {
+                    found = true;
+                    if ((ret = calloc(1, sizeof(attribute_info))) == NULL) goto fail;
+                    ret->attribute_name_index = idx;
+                    ret->attribute_length = len;
+                    BootstrapMethods_attribute *attr = calloc(1, pa->size);
+                    if (attr == NULL) goto fail;
+                    if (!read2(f, &attr->num_bootstrap_methods)) goto fail;
+                    if ((attr->bootstrap_methods = calloc(attr->num_bootstrap_methods+1U,
+                                    sizeof(cp_info *))) == NULL) goto fail;
+                    ret->d.bootstrap = attr;
+
+                    for (int j = 0; j < attr->num_bootstrap_methods; j++)
+                    {
+                        if ((attr->bootstrap_methods[j] = calloc(1, sizeof(bootstrap_method))) == NULL) goto fail;
+                        if (!read2(f, &attr->bootstrap_methods[j]->bootstrap_method_ref)) goto fail;
+                        if (!read2(f, &attr->bootstrap_methods[j]->num_bootstrap_arguments)) goto fail;
+                        if ((attr->bootstrap_methods[j]->bootstrap_arguments =
+                                    calloc(attr->bootstrap_methods[j]->num_bootstrap_arguments,
+                                        sizeof(bootstrap_argument))) == NULL)
+                            goto fail;
+                        for (int k = 0; k < attr->bootstrap_methods[j]->num_bootstrap_arguments; k++)
+                            if (!read2(f, &attr->bootstrap_methods[j]->bootstrap_arguments[k].arg_idx)) goto fail;
+                    }
+                }
+                break;
             default:
                 warnx("Unimplemented predefined attribute %s", pa->name);
                 break;
@@ -1910,32 +1366,29 @@ static attribute_info *readAttribute(Thread *thread, uint32_t me, FILE *f, cp_in
                 break;
         }
     }
-    
+
 
     if (!found) {
-        
         if ((ret = calloc(1, sizeof(attribute_info) + len)) == NULL) {
             warn("readAttribute: !found calloc(%ld) ret", sizeof(attribute_info) + len);
             return NULL;
         }
-        
+
         ret->attribute_name_index = idx;
         ret->attribute_length = len;
-        
+
         if (fread((uint8_t *)&ret->info, 1, len, f) != len) {
             warnx("readAttribute: fread failed to read %d", len);
             goto fail;
         }
         ret->d.data = NULL;
-        ret->name = cp[idx];
-    
-    } else {
-        ret->name = cp[idx];
-    
+
     }
 
-    
+    ret->name = cp[idx];
+
     return ret;
+
 fail:
     warnx("[%d] readAttribute: failed on pa->attr == %d", me, pa->attr);
     if (ret) {
@@ -1946,7 +1399,8 @@ fail:
     return NULL;
 }
 
-static const char *parseParamDescriptor(des_Field *desc, const char *str)
+__attribute__((nonnull))
+static const char *parseParamDescriptor(des_Field *const desc, const char *const str)
 {
     uint8_t *ptr = (uint8_t *)str;
 loop:
@@ -1976,10 +1430,10 @@ loop:
                     return NULL;
                 }
                 tmp++; // skip ;
-                desc->className = strndup((char *)ptr, (size_t)(tmp-ptr-1U));
-                desc->orig_className = strdup(desc->className);
-                for(ptr = (uint8_t *)desc->className; *ptr && *ptr != ';'; ptr++)
-                    if(*ptr == '/') *ptr = '.';
+//                desc->className = strndup((char *)ptr, (size_t)(tmp-ptr-1U));
+//                desc->orig_className = strdup(desc->className);
+//                for(ptr = (uint8_t *)desc->className; *ptr && *ptr != ';'; ptr++)
+//                    if(*ptr == '/') *ptr = '.';
                 return (char *)tmp;
             }
             break;
@@ -2025,11 +1479,9 @@ static const char *dumpParamDesc(const des_Field *desc)
 }
 #endif
 
-static field_info *readField(Thread *thread, FILE *f, cp_info **cp, uint32_t cp_cnt, ClassFile *cls)
+__attribute__((nonnull))
+static field_info *readField(Thread *const thread, FILE *const f, cp_info **const cp, uint32_t cp_cnt, ClassFile *const cls)
 {
-    if (cls == NULL)
-        errx(EXIT_FAILURE, "cls is null");
-
     field_info *ret = NULL;
     attribute_info **attrs = NULL;
 
@@ -2046,7 +1498,7 @@ static field_info *readField(Thread *thread, FILE *f, cp_info **cp, uint32_t cp_
     ret->name = cp[ret->name_index];
     ret->descriptor = cp[ret->descriptor_index];
 
-    if (!parseParamDescriptor(&ret->desc, ret->descriptor->d.utf8.ascii)) {
+    if (!parseParamDescriptor(&ret->desc, ret->descriptor->utf8.ascii)) {
         warnx("parseParamDescriptor");
         goto fail;
     }
@@ -2066,8 +1518,12 @@ static field_info *readField(Thread *thread, FILE *f, cp_info **cp, uint32_t cp_
 
     if (ret->access_flags & ACC_STATIC)
         for (uint32_t i = 0; i < ret->attributes_count; i++)
-            if (attrs[i] && !strcmp(attrs[i]->name->d.utf8.ascii, "ConstantValue"))
-                ret->static_operand = dupOperand(&attrs[i]->d.constant->op);
+            if (attrs[i] && !strcmp(attrs[i]->name->utf8.ascii, "ConstantValue")) {
+                if (ret->static_operand != NULL)
+                    warnx("readField: multiple static_operand");
+                else
+                    ret->static_operand = dupOperand(&attrs[i]->d.constant->op);
+            }
 
     return ret;
 
@@ -2084,6 +1540,7 @@ fail:
             attrs = NULL;
             ret->attributes = NULL;
         }
+        freeAndNullOperand(&ret->static_operand);
         free(ret);
         ret = NULL;
     }
@@ -2091,7 +1548,8 @@ fail:
 }
 
 
-static bool parseMethodDescriptor(des_Method *desc, const char *str)
+__attribute__((nonnull))
+static bool parseMethodDescriptor(des_Method *const desc, const char *const str)
 {
     const char *ptr = str;
     des_Field **ret, **tmp;
@@ -2152,7 +1610,8 @@ fail:
     return false;
 }
 
-static method_info *readMethod(Thread *thread, FILE *f, cp_info **cp, uint32_t cp_cnt, ClassFile *class)
+__attribute__((nonnull))
+static method_info *readMethod(Thread *const thread, FILE *const f, cp_info **const cp, uint32_t cp_cnt, ClassFile *const class)
 {
     method_info *ret = NULL;
     attribute_info **attrs = NULL;
@@ -2168,7 +1627,7 @@ static method_info *readMethod(Thread *thread, FILE *f, cp_info **cp, uint32_t c
     if (!read2(f, &ret->descriptor_index)) { warnx("readMethod: descriptor_index"); goto fail; }
     if (!read2(f, &ret->attributes_count)) { warnx("readMethod: attributes_count"); goto fail; }
 
-    if (ret->descriptor_index >= cp_cnt || ret->name_index >= cp_cnt) { 
+    if (ret->descriptor_index >= cp_cnt || ret->name_index >= cp_cnt) {
         warnx("readMethod: desc_index or name_index OOB");
         goto fail;
     }
@@ -2176,7 +1635,7 @@ static method_info *readMethod(Thread *thread, FILE *f, cp_info **cp, uint32_t c
     ret->name = cp[ret->name_index];
     ret->descriptor = cp[ret->descriptor_index];
 
-    if (!parseMethodDescriptor(&ret->desc, ret->descriptor->d.utf8.ascii)) {
+    if (!parseMethodDescriptor(&ret->desc, ret->descriptor->utf8.ascii)) {
         warnx("readMethod: parseMethodDescriptor fail");
         goto fail;
     }
@@ -2185,24 +1644,24 @@ static method_info *readMethod(Thread *thread, FILE *f, cp_info **cp, uint32_t c
         warn("readMethod: calloc(%d) attrs", ret->attributes_count);
         goto fail;
     }
-    
+
     for (uint32_t i = 0; i < ret->attributes_count; i++) {
         if ((attrs[i] = readAttribute(thread, i, f, cp, cp_cnt)) == NULL) {
             warnx("readMethod: readAttribute failed");
             goto fail;
         }
     }
-    
+
     ret->attributes = attrs;
 
     for (uint32_t i = 0; i < ret->attributes_count; i++) {
         if (!ret->attributes[i]) continue;
-        else if (!strcmp(ret->attributes[i]->name->d.utf8.ascii, "Exceptions"))
+        else if (!strcmp(ret->attributes[i]->name->utf8.ascii, "Exceptions"))
             ret->exceptions = ret->attributes[i]->d.exception;
-        else if (!strcmp(ret->attributes[i]->name->d.utf8.ascii, "Code"))
+        else if (!strcmp(ret->attributes[i]->name->utf8.ascii, "Code"))
             ret->code = ret->attributes[i]->d.code;
     }
-    
+
     return ret;
 fail:
     if (attrs) {
@@ -2218,10 +1677,11 @@ fail:
     return NULL;
 }
 
-static uint16_t *parseCpUtf8ToUtf16(const uint8_t *src, uint16_t len, uint16_t *utf16len)
+__attribute__((nonnull))
+static uint16_t *parseCpUtf8ToUtf16(const uint8_t *src, register uint16_t len, uint16_t *utf16len)
 {
-    uint16_t ptr = 0;
-    uint16_t dst = 0;
+    register uint16_t ptr = 0;
+    register uint16_t dst = 0;
     uint16_t *ret = NULL;
     uint16_t *tmp = NULL;
 
@@ -2230,11 +1690,14 @@ static uint16_t *parseCpUtf8ToUtf16(const uint8_t *src, uint16_t len, uint16_t *
         return NULL;
     }
 
-    if ((ret = malloc((int)len * sizeof(uint16_t))) == NULL) return NULL;
+    if ((ret = malloc((int)len * sizeof(uint16_t))) == NULL) {
+        warn("parseCpUtf8ToUtf16: malloc");
+        return NULL;
+    }
 
     while (ptr < len)
     {
-        uint8_t val = src[ptr++];
+        register uint8_t val = src[ptr++];
 
         if (val == 0) {                 // 0000 0000
             warnx("parseCpUtf8ToUtf16: read 0");
@@ -2262,13 +1725,12 @@ static uint16_t *parseCpUtf8ToUtf16(const uint8_t *src, uint16_t len, uint16_t *
 
     if (dst == 0) goto fail;
 
-    tmp = realloc(ret, dst * sizeof(uint16_t));
-    if (!tmp) {
-        warn("parseCpUtf8ToUtf17: realloc: %d", dst);
+    if ((tmp = realloc(ret, dst * sizeof(uint16_t))) == NULL) {
+        warn("parseCpUtf8ToUtf16: realloc: %d", dst);
         goto fail;
     }
-    ret = tmp;
 
+    ret = tmp;
     *utf16len = dst;
 
     return ret;
@@ -2277,6 +1739,7 @@ fail:
     return NULL;
 }
 
+__attribute__((nonnull))
 static char *parseUtf16ToAscii(const uint16_t *src, uint32_t len)
 {
     char *ret = NULL;
@@ -2310,133 +1773,159 @@ static char *parseUtf16ToAscii(const uint16_t *src, uint32_t len)
     return ret;
 }
 
+__attribute__((nonnull))
 static bool fixupCpUtf8(cp_info *ci)
 {
-    if (ci->d.utf8.utf16 == NULL)
-        ci->d.utf8.utf16 = parseCpUtf8ToUtf16(ci->d.utf8.bytes, ci->d.utf8.length, &ci->d.utf8.utf16len);
-    if (ci->d.utf8.ascii == NULL)
-        ci->d.utf8.ascii = parseUtf16ToAscii(ci->d.utf8.utf16, ci->d.utf8.utf16len);
+    if (ci->utf8.utf16 == NULL)
+        ci->utf8.utf16 = parseCpUtf8ToUtf16(ci->utf8.bytes, ci->utf8.length, &ci->utf8.utf16len);
+    if (ci->utf8.ascii == NULL)
+        ci->utf8.ascii = parseUtf16ToAscii(ci->utf8.utf16, ci->utf8.utf16len);
     return true;
 }
 
 /* TODO - do not normalise the name here */
+__attribute__((nonnull))
 static bool fixUtf8ClassName(cp_info *ci)
 {
-    if (ci->d.utf8.ascii) {
-        if (strchr(ci->d.utf8.ascii, '/') == NULL)
+    if (ci->utf8.ascii) {
+        if (strchr(ci->utf8.ascii, '/') == NULL)
             return true;
 #ifdef DEBUG
-        //printf("fixUtf8ClassName: %s => ", ci->d.utf8.ascii);
+        //printf("fixUtf8ClassName: %s => ", ci->utf8.ascii);
 #endif
-        free(ci->d.utf8.ascii);
-        ci->d.utf8.ascii = NULL;
+        free(ci->utf8.ascii);
+        ci->utf8.ascii = NULL;
     }
 
-    if (ci->d.utf8.utf16) {
-        free(ci->d.utf8.utf16);
-        ci->d.utf8.utf16 = NULL;
+    if (ci->utf8.utf16) {
+        free(ci->utf8.utf16);
+        ci->utf8.utf16 = NULL;
     }
 
-    for (uint16_t i = 0; i < ci->d.utf8.length; i++)
+    for (uint16_t i = 0; i < ci->utf8.length; i++)
     {
-        uint8_t val = ci->d.utf8.bytes[i];
+        uint8_t val = ci->utf8.bytes[i];
 
         if ((val & 0xe0) == 0xc0) {
             i++;
         } else if ((val & 0xf0) == 0xe0) {
             i++; i++;
         } else if (val == '/') {
-            ci->d.utf8.bytes[i] = '.';
+            ci->utf8.bytes[i] = '.';
         }
     }
 
     if (!fixupCpUtf8(ci))
         return false;
 #ifdef DEBUG
-    //printf("%s\n", ci->d.utf8.ascii);
+    //printf("%s\n", ci->utf8.ascii);
 #endif
     return true;
 }
 
-static bool fixupCpString(Thread *thread, cp_info *ci, cp_info **pool, uint16_t cp_len)
+__attribute__((nonnull))
+static bool fixupCpString(Thread * /* thread */, cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
-    if (ci->d.str.string && ci->d.str.intern)
+    if (ci->str.string && ci->str.intern)
         return true;
 
-    if (ci->d.str.string_index >= cp_len)
+    if (ci->str.string_index >= cp_len)
         return false;
-    if (pool[ci->d.str.string_index]->tag != CONSTANT_Utf8)
+    if (pool[ci->str.string_index]->tag != CONSTANT_Utf8)
         return false;
 
-    ci->d.str.string = pool[ci->d.str.string_index];
+    ci->str.string = pool[ci->str.string_index];
 
     return true;
 }
 
+__attribute__((nonnull))
 static bool linkCpString(Thread *thread, cp_info *ci)
 {
-    if ((ci->d.str.intern = newArray(thread, TYPE_CHAR, ci->d.str.string->d.utf8.utf16len, NULL)) == NULL)
+    if ((ci->str.intern = newArray(thread, TYPE_CHAR, ci->str.string->utf8.utf16len, NULL)) == NULL)
         return false;
 
     // lock-- in freeClass
-    ((Object *)ci->d.str.intern)->lock++;
+    ((Object *)ci->str.intern)->lock++;
 
-    fixupCpUtf8((cp_info *)ci->d.str.string);
+    fixupCpUtf8((cp_info *)ci->str.string);
 
-    for (uint32_t i = 0; i < ci->d.str.string->d.utf8.utf16len; i++) {
-        freeAndNullOperand(&ci->d.str.intern->data.array.data[i]);
-        ci->d.str.intern->data.array.data[i] = newOperand(TYPE_CHAR, &ci->d.str.string->d.utf8.utf16[i]);
+    assert(ci->str.intern->array.len == ci->str.string->utf8.utf16len);
+
+    for (uint32_t i = 0; i < ci->str.string->utf8.utf16len; i++) {
+        freeAndNullOperand(&ci->str.intern->array.data[i]);
+        ci->str.intern->array.data[i] = newOperand(TYPE_CHAR, &ci->str.string->utf8.utf16[i]);
     }
 
     return true;
 }
 
+__attribute__((nonnull))
 static bool fixupCpClass(cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
-    if (ci->d.class.name)
+    if (ci->class.name)
         return true;
 
-    if (ci->d.class.name_index >= cp_len) return false;
-    if (pool[ci->d.class.name_index]->tag != CONSTANT_Utf8) return false;
+    if (ci->class.name_index >= cp_len) return false;
+    if (pool[ci->class.name_index]->tag != CONSTANT_Utf8) return false;
 
-    ci->d.class.name = pool[ci->d.class.name_index];
+    ci->class.name = pool[ci->class.name_index];
 
     return true;
 }
 
+__attribute__((nonnull))
 static bool fixupCpFieldref(cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
-    if (ci->d.fr.class && ci->d.fr.nametype)
+    if (ci->fr.class && ci->fr.nametype)
         return true;
 
-    if (ci->d.fr.class_index >= cp_len || ci->d.fr.name_and_type_index >= cp_len)
+    if (ci->fr.class_index >= cp_len || ci->fr.name_and_type_index >= cp_len)
         return false;
 
-    ci->d.fr.class = pool[ci->d.fr.class_index];
-    ci->d.fr.nametype = pool[ci->d.fr.name_and_type_index];
+    ci->fr.class = pool[ci->fr.class_index];
+    ci->fr.nametype = pool[ci->fr.name_and_type_index];
 
-    if (ci->d.fr.class->tag != CONSTANT_Class || ci->d.fr.nametype->tag != CONSTANT_NameAndType)
+    if (ci->fr.class->tag != CONSTANT_Class || ci->fr.nametype->tag != CONSTANT_NameAndType)
         return false;
 
     return true;
 }
 
+__attribute__((nonnull))
 static bool fixupCpNameAndType(cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
-    if (ci->d.nt.name && ci->d.nt.descriptor) return true;
+    if (ci->nt.name && ci->nt.descriptor) return true;
 
-    if (ci->d.nt.name_index >= cp_len || ci->d.nt.descriptor_index >= cp_len)
+    if (ci->nt.name_index >= cp_len || ci->nt.descriptor_index >= cp_len)
         return false;
 
-    ci->d.nt.name = pool[ci->d.nt.name_index];
-    ci->d.nt.descriptor = pool[ci->d.nt.descriptor_index];
+    ci->nt.name = pool[ci->nt.name_index];
+    ci->nt.descriptor = pool[ci->nt.descriptor_index];
 
-    if (ci->d.nt.name->tag != CONSTANT_Utf8 || ci->d.nt.descriptor->tag != CONSTANT_Utf8)
+    if (ci->nt.name->tag != CONSTANT_Utf8 || ci->nt.descriptor->tag != CONSTANT_Utf8)
         return false;
 
     return true;
 }
 
+__attribute__((nonnull))
+static bool fixupCpInvokeDynamic(cp_info *ci, cp_info **pool, uint16_t cp_len)
+{
+    if (ci->id.nametype)
+        return true;
+
+    if (ci->id.name_and_type_index >= cp_len)
+        return false;
+
+    ci->id.nametype = pool[ci->id.name_and_type_index];
+    if (ci->id.nametype->tag != CONSTANT_NameAndType)
+        return false;
+
+    return true;
+}
+
+__attribute__((nonnull))
 static bool fixupConstant(Thread *thread, cp_info *ci, cp_info **pool, uint16_t cp_len)
 {
     switch(ci->tag)
@@ -2453,32 +1942,26 @@ static bool fixupConstant(Thread *thread, cp_info *ci, cp_info **pool, uint16_t 
             return fixupCpFieldref(ci, pool, cp_len);
         case CONSTANT_Utf8:
             return fixupCpUtf8(ci);
+        case CONSTANT_InvokeDynamic:
+            return fixupCpInvokeDynamic(ci, pool, cp_len);
         default:
             break;
     }
     return true;
 }
 
-static bool fixupPostConstant(Thread *thread, cp_info *ci, cp_info **pool, uint16_t cp_len)
+__attribute__((nonnull))
+static bool fixupPostConstant(Thread * /*thread*/, cp_info *ci, cp_info ** /*pool*/, uint16_t /*cp_len*/)
 {
     bool ret = true;
 
     switch(ci->tag)
     {
         case CONSTANT_Class:
-            
-//          if (!ci->d.class.original_name)
-//              ci->d.class.original_name = strdup(ci->d.class.name->d.utf8.ascii);
-
-            return fixUtf8ClassName(ci->d.class.name);
+            return fixUtf8ClassName(ci->class.name);
 
         case CONSTANT_NameAndType:
-//          if (!ci->d.nt.original_name)
-//              ci->d.nt.original_name = strdup(ci->d.nt.name->d.utf8.ascii);
-//          if (!ci->d.nt.original_descriptor)
-//              ci->d.nt.original_descriptor = strdup(ci->d.nt.descriptor->d.utf8.ascii);
-
-            return fixUtf8ClassName(ci->d.nt.descriptor);
+            return fixUtf8ClassName(ci->nt.descriptor);
 
         default:
             break;
@@ -2486,59 +1969,58 @@ static bool fixupPostConstant(Thread *thread, cp_info *ci, cp_info **pool, uint1
     return ret;
 }
 
-static Operand *loadInnerClass(Thread *thread, const InnerClasses_attribute *ic, const ClassFile *cf)
+__attribute__((nonnull(1,2,3)))
+static inline Operand *loadInnerClass(Thread *thread, const InnerClasses_attribute *ic,
+        const ClassFile *cf, Object *classLoader)
 {
-    if(thread == NULL || ic == NULL || cf == NULL)
-        errx(EXIT_FAILURE, "loadInnerClass: shit");
-
-    //char buf[BUFSIZ];
-    
     for (int i = 0; i < ic->number_of_classes; i++)
     {
-        inner_class_def *def = ic->classes[i];
-        const char *clsname = def->inner_ci->d.class.name->d.utf8.ascii;
+        inner_class_def *const def = ic->classes[i];
+        const char *clsname = getClassName(def->inner_ci);
 
-        if(!def || !strcmp(clsname, cf->this_class->d.class.name->d.utf8.ascii))
+        if(!def || !strcmp(clsname, getClassName(cf->this_class)))
             continue;
 
         if(isClassLoaded(thread, clsname))
             continue;
 
-        //snprintf(buf, sizeof(buf), "%s.class", def->inner_ci->d.class.name->d.utf8.ascii);
-
-        if ((def->inner_class = loadClass(thread, clsname)) == NULL) {
+        if ((def->inner_class = loadClass(thread, clsname, classLoader)) == NULL) {
             warnx("loadInnerClass: unable to load %s", clsname);
             return throw(thread, "java.lang.ClassNotFoundException", NULL, 0);
         }
-#ifdef DEBUG
-        printf("(loadInnerClass: %s)\n", clsname);
-#endif
+        dbg_printf("(loadInnerClass: %s)\n", clsname);
         def->inner_class->isInnerClass = true;
-        if (thread->jvm->VM) linkClass(thread, (ClassFile *)def->inner_class);
-        //addClass(thread, def->inner_class);
+
+        /* TODO is this right? why link inners but not outers? */
+        /*if (thread->jvm->VM)
+            linkClass(thread, (ClassFile *)def->inner_class);
+        else*/
+            def->inner_class->isLinked = false;
     }
 
     return NULL;
 }
 
+__attribute__((nonnull))
 static Field *findFieldByName(const Object *const o, const char *const name)
 {
     const field_info *fi;
 
-    for (int i = 0; i < o->data.obj.num_fields; i++)
+    for (int i = 0; i < o->obj.num_fields; i++)
     {
-        if ((fi = (field_info *)o->data.obj.fields[i].field_info) == NULL)
+        if ((fi = (field_info *)o->obj.fields[i].field_info) == NULL)
             continue;
 
-        if (strcmp(fi->name->d.utf8.ascii, name)) continue;
+        if (strcmp(fi->name->utf8.ascii, name)) continue;
 
-        return &o->data.obj.fields[i];
+        return &o->obj.fields[i];
     }
 
     return NULL;
 }
 
 /* not-jvm-safe */
+__attribute__((nonnull))
 static Operand *newStringFromChar(Thread *thread, const Object *buf,
         Object **result)
 {
@@ -2549,18 +2031,18 @@ static Operand *newStringFromChar(Thread *thread, const Object *buf,
     Frame *cur_frame = currentFrame(thread);
 
     /* validate inputs */
-    if (buf == NULL) {
-        warnx("newStringFromChar: buf == NULL");
-        return throw(thread, "java.lang.NullPointerException", ERR_AT, 0);
-    }
+    //if (buf == NULL) {
+    //    warnx("newStringFromChar: buf == NULL");
+    //    return throw(thread, "java.lang.NullPointerException", ERR_AT, 0);
+    //}
 
-    if (buf->type != OBJ_ARRAY || buf->data.array.type != TYPE_CHAR) {
+    if (buf->type != OBJ_ARRAY || buf->array.type != TYPE_CHAR) {
         warnx("newStringFromChar: buf not [C");
         return throw(thread, "java.lang.IllegalArguementException", ERR_AT, 0);
     }
 
     /* create the String */
-    ClassFile *str_cls = findClass(thread, "java.lang.String");
+    ClassFile *str_cls = findClass(thread, "java.lang.String", NULL);
     assert(str_cls != NULL);
     Object *str_obj = newObject(thread, str_cls);
     assert(str_obj != NULL);
@@ -2573,10 +2055,10 @@ static Operand *newStringFromChar(Thread *thread, const Object *buf,
     push(cur_frame, arr_op);
 
     /* invoke String.init(char []) */
-    const method_info *mi = findMethodByClass(thread, str_cls, "<init>", "([C)V");
+    method_info *mi = findMethodByClass(thread, str_cls, "<init>", "([C)V", INVOKE_SPECIAL);
     assert(mi != NULL);
     Operand *ex_opr = NULL;
-    if ((ex_opr = invokeMethod(thread, mi, true, thread->pc)) != NULL) {
+    if ((ex_opr = invokeMethod(thread, mi, true, thread->pc, INVOKE_SPECIAL)) != NULL) {
         warnx("newStringFromChar: <init> ([C)V threw");
         return ex_opr;
     }
@@ -2587,6 +2069,7 @@ static Operand *newStringFromChar(Thread *thread, const Object *buf,
 }
 
 /* not-jvm-safe */
+__attribute__((nonnull))
 static Operand *newString(Thread *thread, const char *const text, Object **result)
 {
     assert(thread->jvm->VM == true);
@@ -2603,10 +2086,11 @@ static Operand *newString(Thread *thread, const char *const text, Object **resul
 
     for (uint32_t i = 0; text[i]; i++)
     {
+        assert(i < array->array.len);
         const uint16_t ch = (uint8_t)text[i];
-        freeAndNullOperand(&array->data.array.data[i]);
-        array->data.array.data[i] = newOperand(TYPE_CHAR, &ch);
-        assert(array->data.array.data[i] != NULL);
+        freeAndNullOperand(&array->array.data[i]);
+        array->array.data[i] = newOperand(TYPE_CHAR, &ch);
+        assert(array->array.data[i] != NULL);
     }
 
     return newStringFromChar(thread, array, result);
@@ -2617,7 +2101,8 @@ static uint32_t num_ary_maps = 0;
 static ary_map_t *ary_maps = NULL;
 static pthread_rwlock_t clslock;
 
-static Object *createClassForArray(Thread *thread, const uint8_t type, const uint8_t dim, const ClassFile *compClass)
+__attribute__((nonnull(1)))
+ClassFile *createClassForArray(Thread *thread, const uint8_t type, const uint8_t dim, const ClassFile *compClass)
 {
     assert(thread->jvm->VM == true);
     int rc;
@@ -2632,9 +2117,11 @@ static Object *createClassForArray(Thread *thread, const uint8_t type, const uin
     buf[dim+1] = '\0';
 
     if(compClass) {
-        strcat(buf, compClass->this_class->d.class.name->d.utf8.ascii);
+        strcat(buf, getClassName(compClass->this_class));
         strcat(buf, ";");
     }
+
+    dbg_printf("createClassForArray: %s[%d] of %s\n", printOpType(type), dim, buf);
 
     if ((rc = pthread_rwlock_tryrdlock(&clslock)) != 0) {
         strerror_r(rc, errbuf, sizeof(errbuf));
@@ -2645,21 +2132,48 @@ static Object *createClassForArray(Thread *thread, const uint8_t type, const uin
     for (ssize_t i = 0; i < num_ary_maps; i++)
         if (ary_maps[i].canonical && !strcmp(buf, ary_maps[i].canonical)) {
             pthread_rwlock_unlock(&clslock);
-            return ary_maps[i].object;
+            dbg_printf("createClassForArray: returning existing Class Object for %s\n", buf);
+            return ary_maps[i].class_file;
         }
 
+    /* TODO we need to preserve the lock until we've added it*/
     pthread_rwlock_unlock(&clslock);
 
-#ifdef DEBUG
-    printf("Creating class for %s\n", buf);
-#endif
+    ClassFile *jlClass_cf = findClass2(thread, "java.lang.Class", false, NULL);
+    if (!jlClass_cf)
+        return NULL;
 
-    ClassFile *class_cf = findClass2(thread, "java.lang.Class", false);
-    if (!class_cf) return NULL;
+    ClassFile *jlObject_cf = findClass2(thread, "java.lang.Object", false, NULL);
+    if (!jlObject_cf)
+        return NULL;
 
     Frame *cur_frame = currentFrame(thread);
 
-    Object *ret = newObject(thread, class_cf);
+    /* create the ClassFile that this Class object will wrap */
+    ClassFile *new_cf = calloc(1, sizeof(ClassFile));
+    if ((rc = pthread_rwlock_init(&new_cf->rwlock, NULL))) {
+        /* TODO */
+        exit(EXIT_FAILURE);
+    }
+
+    new_cf->magic = CLASSFILE_MAGIC;
+    new_cf->major_version = 55;
+    new_cf->minor_version = 0;
+    new_cf->access_flags = ACC_PUBLIC|ACC_FINAL|ACC_ABSTRACT;
+    new_cf->super_class = jlObject_cf->this_class;
+    new_cf->super_name = strdup("java.lang.Object");
+    new_cf->this_class = calloc(1, sizeof(cp_info));
+    new_cf->this_class->dyn = true;
+    new_cf->this_class->class.name = calloc(1, sizeof(cp_info));
+    new_cf->this_class->class.name->utf8.ascii = strdup(buf);
+    //new_cf->isDynamic = true;
+
+    addClass(thread, new_cf, NULL);
+    linkClass(thread, new_cf);
+
+    /* create an instance of the Class object */
+    //Object *ret = newObject(thread, jlClass_cf);
+    Object *ret = new_cf->class_object = createClass(thread, new_cf, NULL);
 
     if ((rc = pthread_rwlock_wrlock(&clslock)) != 0) {
         strerror_r(rc, buf, sizeof(buf));
@@ -2678,30 +2192,35 @@ static Object *createClassForArray(Thread *thread, const uint8_t type, const uin
     }
 
     ary_maps = tmp;
-    ary_maps[num_ary_maps].object = ret;
-    ary_maps[num_ary_maps].canonical = strdup(buf);
+    //ary_maps[num_ary_maps].object = ret;
+    ary_maps[num_ary_maps].class_file = new_cf;
+    if ((ary_maps[num_ary_maps].canonical = strdup(buf)) == NULL) {
+        warn("createClassForArray: strdup");
+        ret->lock--;
+        //ary_maps[num_ary_maps].object = NULL;
+    }
+    dbg_printf("createClassForArray: bumped ary_maps for %s\n", ary_maps[num_ary_maps].canonical);
     num_ary_maps++;
 
     pthread_rwlock_unlock(&clslock);
 
-    const method_info *mi = findMethodByClass(thread, class_cf, "<init>", "()V");
+    method_info *mi = findMethodByClass(thread, jlClass_cf, "<init>", "()V", INVOKE_SPECIAL);
     if (!push(cur_frame, newOperand(TYPE_OREF, ret))) {
         ret->lock--;
         warnx("createClassForArray: push");
         return NULL;
     }
-    if (invokeMethod(thread, mi, true, thread->pc))
+
+    /* call the 'new' method on the Class object */
+    if (invokeMethod(thread, mi, true, thread->pc, INVOKE_SPECIAL))
         errx(EXIT_FAILURE, "createClassForArray: thrown");
 
     Field *fld = NULL;
     Object *str = NULL;
     Operand tmpOp;
 
-    if ((fld = findFieldByName(ret, "isArray")) == NULL) {
-        ret->lock--;
-        warnx("createClassForArray: isArray");
-        return NULL;
-    }
+    if ((fld = findFieldByName(ret, "isArray")) == NULL)
+        errx(EXIT_FAILURE, "createClassForArray: name");
     freeAndNullOperand(&fld->op);
     tmpOp.val.vbool = true;
     fld->op = newOperand(TYPE_BOOL, &tmpOp.val.vbool);
@@ -2717,7 +2236,7 @@ static Object *createClassForArray(Thread *thread, const uint8_t type, const uin
     buf[0] = '\0';
 
     if (compClass)
-        snprintf(buf, BUFSIZ, "%s", compClass->this_class->d.class.name->d.utf8.ascii); // FIXME
+        snprintf(buf, BUFSIZ, "%s", getClassName(compClass->this_class)); // FIXME
     else
         snprintf(buf, BUFSIZ, "%s", printOpType(type));
 
@@ -2725,48 +2244,58 @@ static Object *createClassForArray(Thread *thread, const uint8_t type, const uin
         strcat(buf, "[]");
 
     if ((fld = findFieldByName(ret, "canonicalName")) == NULL)
-        errx(EXIT_FAILURE, "createClass: name");
+        errx(EXIT_FAILURE, "createClassForArray: name");
     freeAndNullOperand(&fld->op);
 
     if ((newString(thread, buf, &str)) != NULL)
         errx(EXIT_FAILURE, "createClassForArray: newString threw");
+    freeAndNullOperand(&fld->op);
     fld->op = newOperand(TYPE_OREF, str);
+
+    /* default is false?
+    if ((fld = findFieldByName(ret, "isPrimitive")) == NULL)
+        errx(EXIT_FAILURE, "createClassForArray: isPrimitive");
+    freeAndNullOperand(&fld->op);
+    tmpOp.val.vbool = false;
+    fld->op = newOperand(TYPE_BOOL, &tmpOp); */
 
     if ((fld = findFieldByName(ret, "componentType")) == NULL)
         errx(EXIT_FAILURE, "createClassForArray: componentType");
-
     freeAndNullOperand(&fld->op);
 
     if (compClass) {
-        fld->op = newOperand(TYPE_OREF, getClassObject(thread,
-                    (ClassFile *)compClass));
+        if ((fld->op = newOperand(TYPE_OREF, getClassObject(thread, (ClassFile *)compClass, true))) == NULL)
+            errx(EXIT_FAILURE, "createClassForArray: unable to getClassObject for compClass");
     } else if (thread->jvm->primUp) {
-        fld->op = newOperand(TYPE_OREF, findObjForPrim(type));
+        if ((fld->op = newOperand(TYPE_OREF, findObjForPrim(type))) == NULL)
+            errx(EXIT_FAILURE, "createClassForArray: unable to findObjForPrim for %s", printOpType(type));
     } else {
-        fld->op = newOperand(TYPE_NULL, 0);
-        // FIXME need to go back over things prior to primUp somehow
+        fld->op = newOperand(TYPE_NULL, &type);
+        if (thread->jvm->primUp)
+            warnx("createClassForArray: NULL componentType for %s", printOpType(type));
     }
 
     // TODO componentType for primitives
 
-    return ret;
+    return new_cf;
 }
 
 /* not-jvm-safe */
-static Object *createClass(Thread *thread, ClassFile *cf)
+__attribute__((nonnull(1,2)))
+static Object *createClass(Thread *thread, ClassFile *cf, Object *classLoader)
 {
     assert(thread->jvm->VM == true);
 
-    ClassFile *class_cf = findClass2(thread, "java.lang.Class", false);
+    ClassFile *class_cf = findClass2(thread, "java.lang.Class", false, classLoader);
     if (!class_cf) return NULL;
 
     Frame *cur_frame = currentFrame(thread);
     Object *ret = newObject(thread, class_cf);
     // lock-- in freeClass
     ret->lock++;
-    method_info *mi = findMethodByClass(thread, class_cf, "<init>", "()V");
+    method_info *mi = findMethodByClass(thread, class_cf, "<init>", "()V", INVOKE_SPECIAL);
     push(cur_frame, newOperand(TYPE_OREF, ret));
-    if (invokeMethod(thread, mi, true, thread->pc))
+    if (invokeMethod(thread, mi, true, thread->pc, INVOKE_SPECIAL))
         errx(EXIT_FAILURE, "createClass: thrown");
 
     Field *fld = NULL;
@@ -2774,30 +2303,53 @@ static Object *createClass(Thread *thread, ClassFile *cf)
 
     if ((fld = findFieldByName(ret, "canonicalName")) == NULL)
         errx(EXIT_FAILURE, "createClass: canonicalName");
-    if (newString(thread, cf->this_class->d.class.name->d.utf8.ascii, &str))
+    if (newString(thread, getClassName(cf->this_class), &str))
         errx(EXIT_FAILURE, "createClass: canonicalName newString");
 
     freeAndNullOperand(&fld->op);
     fld->op = newOperand(TYPE_OREF, str);
 
-    char *simple_name;
+    const char *class_name;
 
-    if ((simple_name = strrchr(cf->this_class->d.class.name->d.utf8.ascii, '.')) == NULL)
-        simple_name = cf->this_class->d.class.name->d.utf8.ascii;
+    class_name = getClassName(cf->this_class);
+
+    const char *simple_name;
+
+    if ((simple_name = strrchr(class_name, '.')) == NULL)
+        simple_name = class_name;
     else
         simple_name++;
+
+    const char *package_name;
+    const char *tmp;
+
+    if ((tmp = strrchr(class_name, ',')) == NULL)
+        package_name = strdup("");
+    else {
+        package_name = strndup(class_name, tmp - class_name);
+    }
+
+    if ((fld = findFieldByName(ret, "packageName")) == NULL)
+        errx(EXIT_FAILURE, "createClass: packageName");
+    if (newString(thread, package_name, &str))
+        errx(EXIT_FAILURE, "createClass: packageName newString");
+
+    freeAndNullOperand(&fld->op);
+    fld->op = newOperand(TYPE_OREF, str);
+
+    free((char *)package_name);
 
     if ((fld = findFieldByName(ret, "simpleName")) == NULL)
         errx(EXIT_FAILURE, "createClass: simpleName");
     if (newString(thread, simple_name, &str))
         errx(EXIT_FAILURE, "createClass: simpleName newString");
-    
+
     freeAndNullOperand(&fld->op);
     fld->op = newOperand(TYPE_OREF, str);
 
     if ((fld = findFieldByName(ret, "name")) == NULL)
         errx(EXIT_FAILURE, "createClass: name");
-    if (newString(thread, cf->this_class->d.class.name->d.utf8.ascii, &str))
+    if (newString(thread, getClassName(cf->this_class), &str))
         errx(EXIT_FAILURE, "createClass: name newString");
 
     freeAndNullOperand(&fld->op);
@@ -2806,7 +2358,7 @@ static Object *createClass(Thread *thread, ClassFile *cf)
     return ret;
 }
 
-static ClassFile *parseClass(Thread *thread, FILE *fp)
+static ClassFile *parseClass(Thread *thread, FILE *fp, const char *file_name, Object *classLoader)
 {
     ClassFile *ret = calloc(1, sizeof(ClassFile));
     if (ret == NULL) err(EXIT_FAILURE, "parseClass: calloc");
@@ -2816,20 +2368,20 @@ static ClassFile *parseClass(Thread *thread, FILE *fp)
     int rc;
     if ((rc = pthread_rwlock_init(&ret->rwlock, NULL))) {
         strerror_r(rc, buf, sizeof(buf));
-        errx(EXIT_FAILURE, "parseClass: pthread_rwlock_init: %s", buf);
+        errx(EXIT_FAILURE, "parseClass: [%s] pthread_rwlock_init: %s", file_name, buf);
     }
 
     if (!read4(fp, &ret->magic)) errx(EXIT_FAILURE, "parseClass: read magic");
 
-    if (ret->magic != 0xcafebabe)
-        errx(EXIT_FAILURE, "Bad magic: 0x%0x", ret->magic);
+    if (ret->magic != CLASSFILE_MAGIC)
+        errx(EXIT_FAILURE, "parseClass: [%s] Bad magic: 0x%0x", file_name, ret->magic);
 
     if (!read2(fp, &ret->minor_version)) err(EXIT_FAILURE, "parseClass: read minor");
     if (!read2(fp, &ret->major_version)) err(EXIT_FAILURE, "parseClass: read major");
 
     if (ret->major_version > 55) {
-        warnx("Unsupported JRE version: %d.%d",
-                ret->major_version, ret->minor_version);
+        warnx("parseClass: [%s] Unsupported JRE version: %d.%d",
+                file_name, ret->major_version, ret->minor_version);
         goto fail;
     }
 
@@ -2893,22 +2445,22 @@ static ClassFile *parseClass(Thread *thread, FILE *fp)
 
     for(int i = 0; i < ret->methods_count; i++)
     {
-        
+
         if ((ret->methods[i] = readMethod(thread, fp, ret->constant_pool,
                         ret->constant_pool_count, ret)) == NULL)
             errx(EXIT_FAILURE, "readMethod[%d]", i);
- 
-//      ret->methods[i]->original_descriptor = strdup(ret->methods[i]->descriptor->d.utf8.ascii);
-//      ret->methods[i]->original_name       = strdup(ret->methods[i]->name->d.utf8.ascii);
-        
+
+//      ret->methods[i]->original_descriptor = strdup(ret->methods[i]->descriptor->utf8.ascii);
+//      ret->methods[i]->original_name       = strdup(ret->methods[i]->name->utf8.ascii);
+
         /* fix class naming style - TODO preserve?*/
-        if (strchr(ret->methods[i]->descriptor->d.utf8.ascii, '/') != NULL)
+        if (strchr(ret->methods[i]->descriptor->utf8.ascii, '/') != NULL)
             fixUtf8ClassName(ret->methods[i]->descriptor);
 
         /* link Code segment */
         for(int j = 0; j < ret->methods[i]->attributes_count; j++)
         {
-            if (!strcmp(ret->methods[i]->attributes[j]->name->d.utf8.ascii, "Code"))
+            if (!strcmp(ret->methods[i]->attributes[j]->name->utf8.ascii, "Code"))
                 ((Code_attribute *)ret->methods[i]->attributes[j]->d.code)->method = ret->methods[i];
         }
     }
@@ -2923,8 +2475,6 @@ static ClassFile *parseClass(Thread *thread, FILE *fp)
                         ret->constant_pool,
                         ret->constant_pool_count)) == NULL)
             errx(EXIT_FAILURE, "readAttribute[%d]", i);
-    
-//  ret->original_name = strdup(ret->this_class->d.class.name->d.utf8.ascii);
 
     for(int i = 1; i < ret->constant_pool_count; i++) {
         if (!fixupPostConstant(thread, (cp_info *)ret->constant_pool[i], ret->constant_pool,
@@ -2936,11 +2486,10 @@ static ClassFile *parseClass(Thread *thread, FILE *fp)
     }
 
     if (ret->super_class)
-        if ((ret->super_name = strdup(ret->super_class->d.class.name->d.utf8.ascii)) == NULL)
+        if ((ret->super_name = strdup(getClassName(ret->super_class))) == NULL)
             err(EXIT_FAILURE, "parseClass: strdup(super_class name)");
 
     /* TODO preserve the on-disk format elsewhere, making this human readable */
-//  ret->canonical_name = strdup(ret->this_class->d.class.name->d.utf8.ascii);
 
     if ((ret->interface_class = calloc(ret->interfaces_count+1U,
                     sizeof(cp_info *))) == NULL)
@@ -2954,19 +2503,23 @@ static ClassFile *parseClass(Thread *thread, FILE *fp)
         errx(EXIT_FAILURE, "parseClass: pthread_rwlock_lock: %s", buf);
     }
 
-    if (!addClass(thread, ret)) {
+    if (!addClass(thread, ret, classLoader)) {
         warnx("parseClass: unable to addClass");
         return NULL;
     }
 
+    ret->isLinked = false;
+
     for(uint32_t i = 0; i < ret->attributes_count; i++)
-        if (!strcmp(ret->attributes[i]->name->d.utf8.ascii, "InnerClasses")) {
-            loadInnerClass(thread, ret->attributes[i]->d.inner, ret);
-        } else if (!strcmp(ret->attributes[i]->name->d.utf8.ascii, "SourceFile")) {
+        if (!strcmp(ret->attributes[i]->name->utf8.ascii, "InnerClasses")) {
+            /* FIXME something screwy is happening in loadInnerClass,
+             * but by bypassing this we wdon't set def->inner_class->isInnerClass etc.
+             * but .. does that matter? */
+            //loadInnerClass(thread, ret->attributes[i]->d.inner, ret);
+        } else if (!strcmp(ret->attributes[i]->name->utf8.ascii, "SourceFile")) {
             ret->srcfile = ret->attributes[i]->d.srcfile->name;
         }
 
-    ret->isLinked = false;
     pthread_rwlock_unlock(&ret->rwlock);
     return ret;
 fail:
@@ -2979,6 +2532,7 @@ fail:
     return NULL;
 }
 
+__attribute__((nonnull))
 static bool linkClass(Thread *thread, ClassFile *ret)
 {
     assert(thread->jvm->VM == true);
@@ -3001,17 +2555,27 @@ static bool linkClass(Thread *thread, ClassFile *ret)
     return true;
 }
 
+__attribute__((nonnull(1)))
 static Operand *throw(Thread *thread, const char *name, const char *text,
         int64_t pc)
 {
     assert(thread->jvm->VM == true);
+#ifdef DEBUG
+    Frame *cur = currentFrame(thread);
+#endif
+    dbg_printf(ANSI_BYEL "(throw %s %s pc:%lu: ",  name, text, pc);
+    dbg_printf("mi:%s ", cur->mi->name->utf8.ascii);
+    dbg_printf("cls:%s ", getClassName(cur->class->this_class));
+    dbg_printf(")\n" ANSI_RESET);
+
+    //abort();
 
     Frame *cur_frame = currentFrame(thread);
     while(cur_frame->sp)
         freeOperand(pop(cur_frame));
 
     Operand *ex_opr = NULL;
-    ClassFile *thrcls = findClass(thread, name);
+    ClassFile *thrcls = findClass(thread, name, NULL);
 
     if (thrcls == NULL) {
         if(!strcmp(name, "java.lang.RuntimeException"))
@@ -3044,16 +2608,19 @@ static Operand *throw(Thread *thread, const char *name, const char *text,
         }
     }
 
+    /* INVOKE_??? */
     method_info *mi = findMethodByClass(thread, thrcls,
-            "<init>", text ? "(Ljava.lang.String;)V" : "()V");
-    if ((ex_opr = invokeMethod(thread, mi, true, pc)) != NULL)
+            "<init>", text ? "(Ljava.lang.String;)V" : "()V", INVOKE_VIRTUAL);
+    if ((ex_opr = invokeMethod(thread, mi, true, pc, INVOKE_VIRTUAL)) != NULL)
         return ex_opr;
 
     if(!push(cur_frame, newOperand(TYPE_OREF, thr)))
         errx(EXIT_FAILURE, "throw: unable to init");
+
+    /* INVOKE_??? */
     mi = findMethodByClass(thread, thrcls,
-            "fillInStackTrace", "()Ljava.lang.Throwable;");
-    if ((ex_opr = invokeMethod(thread, mi, true, pc)) != NULL)
+            "fillInStackTrace", "()Ljava.lang.Throwable;", INVOKE_VIRTUAL);
+    if ((ex_opr = invokeMethod(thread, mi, true, pc, INVOKE_VIRTUAL)) != NULL)
         return ex_opr;
 
     freeOperand(pop(cur_frame));
@@ -3061,13 +2628,12 @@ static Operand *throw(Thread *thread, const char *name, const char *text,
     return newOperand(TYPE_OREF, thr);
 }
 
+__attribute__((nonnull))
 static bool isClassLoaded(Thread *thread, const char *clsname)
 {
     JVM *jvm = (JVM *)thread->jvm;
 
-#ifdef DEBUG
-    printf("(isClassLoaded: %s)\n", clsname);
-#endif
+    dbg_printf("(isClassLoaded: %s)\n", clsname);
 
     if (pthread_rwlock_rdlock(&jvm->rwlock))
         errx(EXIT_FAILURE, "isClassLoaded: pthread_rwlock_rdlock");
@@ -3076,7 +2642,7 @@ static bool isClassLoaded(Thread *thread, const char *clsname)
     {
         if (!jvm->method_area[i])
             continue;
-        if (!strcmp(jvm->method_area[i]->this_class->d.class.name->d.utf8.ascii, clsname)) {
+        if (!strcmp(getClassName(jvm->method_area[i]->this_class), clsname)) {
             pthread_rwlock_unlock(&jvm->rwlock);
             return true;
         }
@@ -3087,12 +2653,13 @@ static bool isClassLoaded(Thread *thread, const char *clsname)
 }
 
 /* setting load to false prevents recursive hell */
-static ClassFile *findClass2(Thread *const thread, const char *const clsname, const bool load)
+static ClassFile *findClass2(Thread *const thread, const char *const clsname, const bool load, Object *classLoader)
 {
     ClassFile *ret = NULL;
     JVM *const jvm = (JVM *)thread->jvm;
     int rc;
     char buf[BUFSIZ];
+
 
     if (!jvm) return NULL;
 
@@ -3105,7 +2672,7 @@ static ClassFile *findClass2(Thread *const thread, const char *const clsname, co
     {
         if (!jvm->method_area[i])
             continue;
-        if (!strcmp(jvm->method_area[i]->this_class->d.class.name->d.utf8.ascii,
+        if (!strcmp(getClassName(jvm->method_area[i]->this_class),
                     clsname)) {
             ret = jvm->method_area[i];
             break;
@@ -3122,14 +2689,17 @@ static ClassFile *findClass2(Thread *const thread, const char *const clsname, co
     if (!ret && load) {
         ClassFile *tmp = NULL;
         //snprintf(buf, sizeof(buf), "%s.class", clsname);
-        tmp = loadClass(thread, clsname);
+        tmp = loadClass(thread, clsname, classLoader);
         if (!tmp) return NULL;
         if (thread->jvm->VM && !linkClass(thread, tmp)) return NULL;
         ret = tmp;
     }
+    if (!ret)
+        printf("findClass2: %s\n", clsname);
     return ret;
 }
 
+__attribute__((nonnull(1,3)))
 static bool canCast(Thread *thread, const char *from, const char *to)
 {
     /* null can always be cast to any Object? */
@@ -3139,8 +2709,8 @@ static bool canCast(Thread *thread, const char *from, const char *to)
     if (!strcmp(from, to)) return true;
     if (!strcmp("java.lang.Object", to)) return true; /* this is a bit shit FIXME */
 
-    ClassFile *fromCls = findClass(thread, from);
-    ClassFile *toCls = findClass(thread, to);
+    ClassFile *fromCls = findClass(thread, from, NULL);
+    ClassFile *toCls = findClass(thread, to, NULL);
 
     if(!fromCls || !toCls) return false;
 
@@ -3170,55 +2740,90 @@ static bool canCast(Thread *thread, const char *from, const char *to)
 }
 
 /* not-jvm-safe */
-static ClassFile *findClass(Thread *const thread, const char *const clsname)
+__attribute__((nonnull(1,2)))
+static ClassFile *findClass(Thread *const thread, const char *const clsname, Object *classLoader)
 {
     assert(thread->jvm->VM == true);
-    return findClass2(thread, clsname, true);
+    return findClass2(thread, clsname, true, classLoader);
 }
 
-static method_info *findMethodByClass(Thread *thread, const ClassFile *cls, const char *mthname, const char *desc)
+/*
+ * TODO: check the search method aligns to the specification, specifically
+ * with interfaces vs parent classes
+ */
+__attribute__((nonnull(1,3,4)))
+static method_info *findMethodByClass(Thread *thread, const ClassFile *cls, const char *mthname, const char *desc, invoke_t invoke)
 {
-    if (cls == NULL)
-        cls = findClass(thread, "java.lang.Object");
+    dbg_printf("check_method: invoke is %s\n", invokeTypes[invoke]);
 
-    for (ssize_t i = 0; i < cls->methods_count; i++)
-    {
-        //printf("check %s == %s\n", desc, cls->methods[i]->descriptor->d.utf8.ascii);
-        if (!strcmp(cls->methods[i]->name->d.utf8.ascii, mthname) &&
-                !strcmp(desc, cls->methods[i]->descriptor->d.utf8.ascii)) {
-            return cls->methods[i];
-        }
+    if (cls == NULL) {
+        warnx("findMethodByClass: cls == NULL looking for method %s and desc %s", mthname, desc);
+        abort();
+        return NULL;
     }
 
-    if (cls->interfaces_count > 0) {
-        method_info *mi = NULL;
-        for (ssize_t i = 0; i < cls->interfaces_count; i++) {
-            if ((mi = findClassMethod(thread,
-                            cls->interface_class[i]->d.class.name->d.utf8.ascii, mthname,
-                            desc)) != NULL)
-                return mi;
+    /* there is a bug here in that sometimes an abstract method of an interface is returned,
+     * instead of the concrete implementation in a super class */
+
+    if (invoke == INVOKE_VIRTUAL || invoke == INVOKE_SPECIAL || invoke == INVOKE_STATIC || invoke == INVOKE_INTERFACE)
+        for (ssize_t i = 0; i < cls->methods_count; i++)
+        {
+            if ( (cls->methods[i]->access_flags & ACC_STATIC) && invoke != INVOKE_STATIC && invoke != INVOKE_SPECIAL)
+                continue;
+
+            dbg_printf("check_method: (%s) %s:%s == %s:%s\n", 
+                    getClassName(cls->this_class),
+                    mthname, desc, 
+                    cls->methods[i]->name->utf8.ascii, cls->methods[i]->descriptor->utf8.ascii);
+            if (!strcmp(cls->methods[i]->name->utf8.ascii, mthname) &&
+                    !strcmp(desc, cls->methods[i]->descriptor->utf8.ascii)) {
+                    /* && (permitAbstract || !(cls->methods[i]->access_flags & ACC_ABSTRACT))*/
+                dbg_printf("check_method: MATCH\n");
+                return cls->methods[i];
+            }
         }
-    } 
-    
-    if (cls->super_name)
-        return findClassMethod(thread, cls->super_name, mthname, desc);
-    else
-        return NULL;
+
+    /* should this check if the parent class is an interface? */
+    if (cls->super_name) {
+        method_info *mi = NULL;
+        //dbg_printf("check_method: super: %s\n", cls->super_name);
+        if ((mi = findClassMethod(thread, cls->super_name, mthname, desc, invoke)) != NULL)
+            return mi;
+    }
+
+    if (invoke == INVOKE_INTERFACE || invoke == INVOKE_VIRTUAL)
+        if (cls->interfaces_count > 0) {
+            method_info *mi = NULL;
+            for (ssize_t i = 0; i < cls->interfaces_count; i++) {
+                dbg_printf("check_method: interface %s\n", getClassName(cls->interface_class[i]));
+                if ((mi = findClassMethod(thread,
+                                getClassName(cls->interface_class[i]), mthname,
+                                desc, invoke)) != NULL)
+                    return mi;
+            }
+        }
+
+    dbg_printf("check_method: fail: %s %s\n", mthname, desc);
+    return NULL;
 }
 
-static method_info *findClassMethod(Thread *thread, const char *clsname, const char *mthname, const char *desc)
+    __attribute__((nonnull))
+static method_info *findClassMethod(Thread *thread, const char *clsname, const char *mthname, const char *desc, invoke_t invoke)
 {
     assert(thread->jvm->VM == true);
-    ClassFile *cls = findClass(thread, clsname);
+    ClassFile *cls = findClass(thread, clsname, NULL);
     if (cls == NULL) return NULL;
 
-    return findMethodByClass(thread, cls, mthname, desc);
+    dbg_printf("findClassMethod: converted %s to %s\n", clsname, getClassName(cls->this_class));
+
+    return findMethodByClass(thread, cls, mthname, desc, invoke);
 }
 
+    __attribute__((nonnull))
 static field_info *findClassField(Thread *thread, const char *clsname, const char *fldname)
 {
     assert(thread->jvm->VM == true);
-    ClassFile *cls = findClass(thread, clsname);
+    ClassFile *cls = findClass(thread, clsname, NULL);
     if (cls == NULL) {
         warnx("findClassField: no such class %s", clsname);
         return NULL;
@@ -3227,10 +2832,11 @@ static field_info *findClassField(Thread *thread, const char *clsname, const cha
     return findClassFieldForClass(thread, cls, fldname);
 }
 
+    __attribute__((nonnull))
 static field_info *findClassFieldForClass(Thread *thread, ClassFile *cls, const char *fldname)
 {
     for (ssize_t i = 0; i < cls->fields_count; i++)
-        if (!strcmp(cls->fields[i]->name->d.utf8.ascii, fldname))
+        if (!strcmp(cls->fields[i]->name->utf8.ascii, fldname))
             return cls->fields[i];
 
     if(cls->super_class)
@@ -3238,14 +2844,16 @@ static field_info *findClassFieldForClass(Thread *thread, ClassFile *cls, const 
     return NULL;
 }
 
+    __attribute__((nonnull))
 static attribute_info *findAttribute(attribute_info **attrs, uint16_t num, const char *name)
 {
     for(uint16_t i = 0; i < num; i++)
-        if (!strcmp(attrs[i]->name->d.utf8.ascii, name))
+        if (!strcmp(attrs[i]->name->utf8.ascii, name))
             return (attrs[i]);
     return NULL;
 }
 
+    __attribute__((nonnull))
 static Operand *classInit(Thread *thread, ClassFile *cls)
 {
     assert(thread->jvm->VM == true);
@@ -3256,8 +2864,10 @@ static Operand *classInit(Thread *thread, ClassFile *cls)
     Operand *ret = NULL;
     Operand *ex_opr = NULL;
 
-    if (!cls || cls->isInit) // FIXME lock the class first
+
+    if (cls->isInit) // FIXME lock the class first
         return NULL;
+
 
     if ((rc = pthread_rwlock_wrlock(&cls->rwlock))) {
         strerror_r(rc, buf, sizeof(buf));
@@ -3265,8 +2875,11 @@ static Operand *classInit(Thread *thread, ClassFile *cls)
         return NULL; // FIXME error?
     }
 
-    if (cls->isInit)
+    if (cls->isInit) {
         goto done;
+    }
+
+    dbg_printf("(classInit: %s)\n", getClassName(cls->this_class));
 
     cls->isInit = true;
 
@@ -3277,7 +2890,7 @@ static Operand *classInit(Thread *thread, ClassFile *cls)
 
         for (ssize_t j = 0; j < cls->fields[i]->attributes_count; j++)
             if (cls->fields[i]->attributes[j] && !strcmp("ConstantValue",
-                        cls->fields[i]->attributes[j]->name->d.utf8.ascii))
+                        cls->fields[i]->attributes[j]->name->utf8.ascii))
             {
                 attribute_info *ai = cls->fields[i]->attributes[j];
 
@@ -3286,7 +2899,7 @@ static Operand *classInit(Thread *thread, ClassFile *cls)
 
                     if (ai->d.constant->op.val.vref == NULL) {
                         Object *tmp = NULL;
-                        cp_String_info *si = &ai->d.constant->entry->d.str;
+                        cp_String_info *si = &ai->d.constant->entry->str;
                         if ((ex_opr = newStringFromChar(thread, si->intern,
                                         &tmp)) != NULL) {
                             warnx("classInit unable to newString");
@@ -3307,8 +2920,8 @@ static Operand *classInit(Thread *thread, ClassFile *cls)
 
 done:
 
-    if ((mi = findMethodByClass(thread, cls, "<clinit>", "()V")) != NULL)
-        ret = invokeMethod(thread, mi, false, thread->pc);
+    if ( ((mi = cls->init) != NULL) || ((mi = cls->init = findMethodByClass(thread, cls, "<clinit>", "()V", INVOKE_SPECIAL)) != NULL) )
+        ret = invokeMethod(thread, mi, false, thread->pc, INVOKE_SPECIAL);
     else
         ret = NULL;
 
@@ -3318,6 +2931,7 @@ done:
 }
 
 /* FIXME we should return throw() not NULL */
+__attribute__((nonnull))
 static Operand *getFieldInfo(Thread *thread, ClassFile *cls, const uint16_t which, field_info **fld)
 {
     assert(thread->jvm->VM == true);
@@ -3335,8 +2949,8 @@ static Operand *getFieldInfo(Thread *thread, ClassFile *cls, const uint16_t whic
 
     cp_info *cp = cls->constant_pool[which];
     field_info *fi = findClassField(thread,
-            cp->d.fr.class->d.class.name->d.utf8.ascii,
-            cp->d.fr.nametype->d.nt.name->d.utf8.ascii);
+            getClassName(cp->fr.class),
+            cp->fr.nametype->nt.name->utf8.ascii);
 
     if (fi && !fi->class->isInit)
         if ((ret = classInit(thread, (ClassFile *)fi->class)) != NULL)
@@ -3344,8 +2958,8 @@ static Operand *getFieldInfo(Thread *thread, ClassFile *cls, const uint16_t whic
 
     if (!fi) {
         warnx("getFieldInfo: unable to find field for %s %s",
-                cp->d.fr.class->d.class.name->d.utf8.ascii,
-                cp->d.fr.nametype->d.nt.name->d.utf8.ascii);
+                getClassName(cp->fr.class),
+                cp->fr.nametype->nt.name->utf8.ascii);
     }
 
     *fld = fi;
@@ -3353,34 +2967,41 @@ static Operand *getFieldInfo(Thread *thread, ClassFile *cls, const uint16_t whic
     return NULL;
 }
 
-static uint16_t readShort(uint8_t *code, int64_t *pc)
+/* TODO: resolve the inconsistency in pc+1 vs pc, without breaking all invocations */
+
+__attribute__((nonnull))
+static inline uint16_t readShort(uint8_t *code, int64_t *pc)
 {
     uint16_t ret = (uint16_t)(256U * code[(*pc)+1] + code[(*pc)+2]);
     *pc += 2;
     return ret;
 }
 
-static int32_t readInt(uint8_t *code, int64_t *pc)
+__attribute__((nonnull))
+static inline int32_t readInt(const uint8_t *code, int64_t *pc)
 {
     int32_t ret = (int32_t)(16777216U * code[(*pc)] + 65536U * code[(*pc)+1] + 256U * code[(*pc)+2] + code[(*pc)+3]);
     *pc += 4;
     return ret;
 }
 
-static int16_t readBranch(uint8_t *code, int64_t *pc, const int16_t off)
+__attribute__((nonnull))
+static inline int16_t readBranch(const uint8_t *code, int64_t *pc, const int16_t /*off*/)
 {
     int16_t bra = (int16_t)(256U * code[(*pc)+1] + code[(*pc)+2]);
     *pc += 2;
     return (int16_t)(bra - 3);
 }
 
-static int32_t readBranchWide(uint8_t *code, int64_t *pc, const int16_t off)
+__attribute__((nonnull))
+static inline int32_t readBranchWide(const uint8_t *code, int64_t *pc, const int16_t /*off*/)
 {
     int32_t bra = (int32_t)(16777216U * code[(*pc)] + 65536U * code[(*pc)+1] + 256U * code[(*pc)+2] + code[(*pc)+3]);
     *pc += 2;
     return (int32_t)(bra - 5);
 }
 
+__attribute__((nonnull))
 static Operand *ldc(const int idx, Frame *cur_frame, const ClassFile *cls, Thread *thread, const int64_t pc)
 {
     cp_info *cp = cls->constant_pool[idx];
@@ -3393,20 +3014,20 @@ static Operand *ldc(const int idx, Frame *cur_frame, const ClassFile *cls, Threa
                 ClassFile *strcls;
                 Object *o = newObject(thread,
                         strcls = findClass(thread,
-                            "java.lang.String"));
+                            "java.lang.String", NULL));
 
                 if(!push(cur_frame, newOperand(TYPE_OREF, o)))
                     return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
-                if(!push(cur_frame, newOperand(TYPE_AREF, cp->d.str.intern)))
+                if(!push(cur_frame, newOperand(TYPE_AREF, cp->str.intern)))
                     return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
                 method_info *meth;
-                meth = findMethodByClass(thread, strcls, "<init>", "([C)V");
+                meth = findMethodByClass(thread, strcls, "<init>", "([C)V", INVOKE_SPECIAL);
 
                 if (meth == NULL)
                     return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
-                if((ex_opr = invokeMethod(thread, meth, true, pc)) != NULL)
+                if((ex_opr = invokeMethod(thread, meth, true, pc, INVOKE_SPECIAL)) != NULL)
                     return ex_opr;
 
                 if(!push(cur_frame, newOperand(TYPE_OREF, o)))
@@ -3415,30 +3036,27 @@ static Operand *ldc(const int idx, Frame *cur_frame, const ClassFile *cls, Threa
             break;
         case CONSTANT_Class:
             {
-#ifdef DEBUG
-                printf("Class %s", cp->d.class.name->d.utf8.ascii);
-#endif
-                ClassFile *cls = findClass(thread, cp->d.class.name->d.utf8.ascii);
-                if (!cls || !getClassObject(thread, (ClassFile *)cls))
+                dbg_printf("CONSTANT: Class %s\n", getClassName(cp));
+                ClassFile *cls = findClass(thread, getClassName(cp), NULL);
+                if (!cls || !getClassObject(thread, (ClassFile *)cls, false)) {
+                    printf("CONSTANT_Class fail\n");
                     return throw(thread, "java.lang.ClassNotFoundException", ERR_AT, pc);
+                }
 
-                if (!push(cur_frame, newOperand(TYPE_OREF, getClassObject(thread, (ClassFile *)cls))))
+                if (!push(cur_frame, newOperand(TYPE_OREF, getClassObject(thread, (ClassFile *)cls, false))))
                     return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
             }
             break;
         case CONSTANT_Float:
-#ifdef DEBUG
-            printf("float %d", (int)cp->d.tfloat.c_float); // FIXME printf
-#endif
-            if(!push(cur_frame, newOperand(TYPE_FLOAT, &cp->d.tfloat.c_float)))
+            if(!push(cur_frame, newOperand(TYPE_FLOAT, &cp->tfloat.c_float)))
                 return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
             break;
         case CONSTANT_Integer:
-            if(!push(cur_frame, newOperand(TYPE_INT, &cp->d.tint.c_int)))
+            if(!push(cur_frame, newOperand(TYPE_INT, &cp->tint.c_int)))
                 return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
             break;
         case CONSTANT_Long:
-            if(!push(cur_frame, newOperand(TYPE_LONG, &cp->d.tlong.c_long)))
+            if(!push(cur_frame, newOperand(TYPE_LONG, &cp->tlong.c_long)))
                 return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
             break;
         default:
@@ -3447,6 +3065,7 @@ static Operand *ldc(const int idx, Frame *cur_frame, const ClassFile *cls, Threa
     return NULL;
 }
 
+__attribute__((nonnull(1,2),hot))
 static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_mod, int64_t *pcstore)
 {
     int64_t pc      = 0 + pc_mod;
@@ -3466,6 +3085,16 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
     assert(cls != NULL);
 
     Operand tmpOp;
+
+#ifdef DEBUG_CODE
+    const Frame *const cur_frame = currentFrame(thread);
+    dumpFrame(cur_frame);
+#endif
+
+    dbg_cprintf("\nrunCode: (%s:%s)\n",
+            getClassName(cur_frame->class->this_class),
+            cur_frame->mi->name->utf8.ascii
+            );
 
     if (!cls->isInit) {
         Operand *ret = classInit(thread, (ClassFile *)cls);
@@ -3487,9 +3116,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
         if (pcstore) *pcstore = pc;
         cur_frame->pc = (uint32_t)(pc);
 
-#ifdef DEBUG_CODE
-        printf("%03ld: [%02x] ", pc, opc);
-#endif
+
+        dbg_cprintf("%03ld: [%02x] ", pc, opc);
+
 
         switch(opc)
         {
@@ -3497,134 +3126,130 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x01: /* aconst_null */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " aconst_null\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " aconst_null\n" ANSI_RESET);
+
                     push(cur_frame, newOperand(TYPE_NULL, NULL));
                 }
                 break;
             case 0x02: /* iconst_m1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " iconst_m1\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " iconst_m1\n" ANSI_RESET);
+
                     tmpOp.val.vint = -1;
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                 }
                 break;
             case 0x03: /* iconst 0 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " iconst_0\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " iconst_0\n" ANSI_RESET);
+
                     tmpOp.val.vint = 0;
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                 }
                 break;
             case 0x04: /* iconst 1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" iconst_1\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" iconst_1\n" ANSI_RESET);
+
                     tmpOp.val.vint = 1;
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                 }
                 break;
             case 0x05: /* iconst 2 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" iconst_2\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" iconst_2\n" ANSI_RESET);
+
                     tmpOp.val.vint = 2;
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                 }
                 break;
             case 0x06: /* iconst 3 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" iconst_3\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" iconst_3\n" ANSI_RESET);
+
                     tmpOp.val.vint = 3;
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                 }
                 break;
             case 0x07: /* iconst 4 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" iconst_4\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" iconst_4\n" ANSI_RESET);
+
                     tmpOp.val.vint = 4;
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                 }
                 break;
             case 0x08: /* iconst 5 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" iconst_5\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" iconst_5\n" ANSI_RESET);
+
                     tmpOp.val.vint = 5;
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                 }
                 break;
             case 0x09: /* lconst 0 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lconst_0\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lconst_0\n" ANSI_RESET);
+
                     tmpOp.val.vlong = 0;
                     push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
                 }
                 break;
             case 0x0a: /* lconst 1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lconst_1\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lconst_1\n" ANSI_RESET);
+
                     tmpOp.val.vlong = 1;
                     push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
                 }
                 break;
             case 0x0b: /* fconst_0 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fconst_0 " ANSI_RESET "\n");
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " fconst_0 " ANSI_RESET "\n");
+
                     tmpOp.val.vfloat = 0.0f;
                     push(cur_frame, newOperand(TYPE_FLOAT, &tmpOp.val.vfloat));
                 }
                 break;
             case 0x0c: /* fconst_1 */
                 {
-#ifdef  DEBUG_CODE
-                    printf(ANSI_INSTR " fconst_1 " ANSI_RESET "\n");
-#endif
+                    dbg_cprintf(ANSI_INSTR " fconst_1 " ANSI_RESET "\n");
+
                     tmpOp.val.vfloat = 1.0f;
                     push(cur_frame, newOperand(TYPE_FLOAT, &tmpOp.val.vfloat));
                 }
                 break;
             case 0x0d: /* fconst_2 */
                 {
-#ifdef  DEBUG_CODE
-                    printf(ANSI_INSTR " fconst_2 " ANSI_RESET "\n");
-#endif
+                    dbg_cprintf(ANSI_INSTR " fconst_2 " ANSI_RESET "\n");
+
                     tmpOp.val.vfloat = 2.0f;
                     push(cur_frame, newOperand(TYPE_FLOAT, &tmpOp.val.vfloat));
                 }
                 break;
             case 0x0e: /* dconst_0 */
                 {
-#ifdef  DEBUG_CODE
-                    printf(ANSI_INSTR " dconst_0 " ANSI_RESET "\n");
-#endif
+                    dbg_cprintf(ANSI_INSTR " dconst_0 " ANSI_RESET "\n");
+
                     tmpOp.val.vdouble = 0.0f;
                     push(cur_frame, newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble));
                 }
                 break;
             case 0x0f: /* dconst_1 */
                 {
-#ifdef  DEBUG_CODE
-                    printf(ANSI_INSTR " dconst_1 " ANSI_RESET "\n");
-#endif
+                    dbg_cprintf(ANSI_INSTR " dconst_1 " ANSI_RESET "\n");
+
                     tmpOp.val.vdouble = 1.0f;
                     push(cur_frame, newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble));
                 }
@@ -3632,18 +3257,18 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x10: /* bipush */
                 {
                     tmpOp.val.vint = code[++pc];
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " bipush " ANSI_RESET "%d\n", tmpOp.val.vint);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " bipush " ANSI_RESET "%d\n", tmpOp.val.vint);
+
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                 }
                 break;
             case 0x11: /* sipush */
                 {
                     tmpw = readShort(code, &pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " sipush " ANSI_RESET " %d\n", tmpw);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " sipush " ANSI_RESET " %d\n", tmpw);
+
                     tmpOp.val.vint = tmpw;
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                 }
@@ -3651,45 +3276,45 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x12: /* ldc */
                 {
                     tmp = code[++pc];
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ldc " ANSI_RESET "#%d ", tmp);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " ldc " ANSI_RESET "#%d ", tmp);
+                    dbg_cprintf("\n");
+
                     Operand *ex_opr = ldc(tmp, cur_frame, cls, thread, pc);
                     if (ex_opr) return ex_opr;
-#ifdef DEBUG_CODE
-                    printf("\n");
-#endif
+
+
                 }
                 break;
             case 0x13: /* ldc_w */
                 {
                     tmpw = readShort(code, &pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "ldc_w " ANSI_RESET "%d\n", tmpw);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "ldc_w " ANSI_RESET "%d\n", tmpw);
+
                     Operand *ex_opr = ldc(tmpw, cur_frame, cls, thread, pc);
                     if (ex_opr) return ex_opr;
-#ifdef DEBUG_CODE
-                    printf("\n");
-#endif
+
+                    dbg_cprintf("\n");
+
                 }
                 break;
             case 0x14: /* ldc2_w */
                 {
                     tmpw = readShort(code, &pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ldc2_w " ANSI_RESET "%d\n", tmpw);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " ldc2_w " ANSI_RESET "%d\n", tmpw);
+
                     cp_info *cp = cls->constant_pool[tmpw];
 
                     switch(cp->tag)
                     {
                         case CONSTANT_Long:
-                            if(!push(cur_frame, newOperand(TYPE_LONG, &cp->d.tlong.c_long)))
+                            if(!push(cur_frame, newOperand(TYPE_LONG, &cp->tlong.c_long)))
                                 return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                             break;
                         case CONSTANT_Double:
-                            if(!push(cur_frame, newOperand(TYPE_DOUBLE, &cp->d.tdouble.c_double)))
+                            if(!push(cur_frame, newOperand(TYPE_DOUBLE, &cp->tdouble.c_double)))
                                 return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                             break;
                         default:
@@ -3705,9 +3330,13 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         tmp += code[++pc];
                         is_wide = 0;
                     }
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " iload " ANSI_RESET "%d\n", tmp);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " iload " ANSI_RESET "%d [%s %s]\n", 
+                            tmp,
+                            printOpType(getLocal(cur_frame, tmp)->type),
+                            printOpValue(getLocal(cur_frame, tmp))
+                            );
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame, tmp))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -3720,9 +3349,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         tmp += code[++pc];
                         is_wide = 0;
                     }
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lload " ANSI_RESET "%d\n", tmp);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lload " ANSI_RESET "%d\n", tmp);
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame, tmp))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -3730,9 +3359,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x17: /* fload */
                 {
                     tmp = code[++pc];
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fload " ANSI_RESET "%d\n", tmp);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " fload " ANSI_RESET "%d\n", tmp);
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame, tmp))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -3745,9 +3374,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         tmp += code[++pc];
                         is_wide = 0;
                     }
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dload " ANSI_RESET "%d\n", tmp);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " dload " ANSI_RESET "%d\n", tmp);
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame, tmp))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -3760,157 +3389,161 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         tmp += code[++pc];
                         is_wide = 0;
                     }
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " aload " ANSI_RESET "%d\n", tmp);
-#endif
+                    
+                    dbg_cprintf(ANSI_INSTR " aload " ANSI_RESET "%d [%s %s]\n", 
+                            tmp,
+                            printOpType(getLocal(cur_frame, tmp)->type),
+                            printOpValue(getLocal(cur_frame, tmp))
+                            );
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame, tmp))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x1a: /* iload_0 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " iload_0\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " iload_0\n" ANSI_RESET);
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,0))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x1b: /* iload_1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" iload_1\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" iload_1\n" ANSI_RESET);
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,1))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x1c: /* iload_2 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" iload_2\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" iload_2\n" ANSI_RESET);
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,2))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x1d: /* iload_3 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" iload_3 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR" iload_3 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[3]->type),
                             printOpValue(cur_frame->local[3]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,3))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x1e: /* lload_0 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lload_0 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " lload_0 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[0]->type),
                             printOpValue(cur_frame->local[0]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,0))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x1f: /* lload_1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lload_1 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " lload_1 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[1]->type),
                             printOpValue(cur_frame->local[1]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,1))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x20: /* lload_2 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lload_2 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " lload_2 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[2]->type),
                             printOpValue(cur_frame->local[2]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,2))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x21: /* lload_3 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lload_3 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " lload_3 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[3]->type),
                             printOpValue(cur_frame->local[3]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,3))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x22: /* fload_0 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fload_0 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " fload_0 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[0]->type),
                             printOpValue(cur_frame->local[0]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,0))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x23: /* fload_1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fload_1 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " fload_1 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[1]->type),
                             printOpValue(cur_frame->local[1]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,1))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x24: /* fload_2 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fload_2 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " fload_2 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[2]->type),
                             printOpValue(cur_frame->local[2]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,2))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x25: /* fload_3 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fload_3 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " fload_3 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[3]->type),
                             printOpValue(cur_frame->local[3]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,3))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x26: /* dload_0 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dload_0 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " dload_0 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[0]->type),
                             printOpValue(cur_frame->local[0]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,0))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x27: /* dload_1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dload_1 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " dload_1 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[1]->type),
                             printOpValue(cur_frame->local[1]));
-#endif
+
                     Operand *o = getLocal(cur_frame,1);
                     if(o == NULL || o->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
@@ -3920,106 +3553,100 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x28: /* dload_2 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dload_2 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " dload_2 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[2]->type),
                             printOpValue(cur_frame->local[2]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,2))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x29: /* dload_3 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dload_3 " ANSI_RESET "%s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " dload_3 " ANSI_RESET "%s %s\n",
                             printOpType(cur_frame->local[3]->type),
                             printOpValue(cur_frame->local[3]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,3))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x2a: /* aload_0 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " aload_0 " ANSI_RESET " %s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " aload_0 " ANSI_RESET " %s %s\n",
                             printOpType(cur_frame->local[0]->type),
                             printOpValue(cur_frame->local[0]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,0))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x2b: /* aload_1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " aload_1" ANSI_RESET " %s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " aload_1" ANSI_RESET " %s %s\n",
                             printOpType(cur_frame->local[1]->type),
                             printOpValue(cur_frame->local[1]));
-#endif
+
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,1))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x2c: /* aload_2 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " aload_2" ANSI_RESET " %s %s\n",
+                    dbg_cprintf(ANSI_INSTR " aload_2" ANSI_RESET " %s %s\n",
                             printOpType(cur_frame->local[2]->type),
                             printOpValue(cur_frame->local[2]));
-#endif
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,2))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x2d: /* aload_3 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" aload_3" ANSI_RESET " %s %s\n",
+                    dbg_cprintf(ANSI_INSTR" aload_3" ANSI_RESET " %s %s\n",
                             printOpType(cur_frame->local[3]->type),
                             printOpValue(cur_frame->local[3]));
-#endif
                     if(!push(cur_frame, dupOperand(getLocal(cur_frame,3))))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x2e: /* iaload */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " iaload\n" ANSI_RESET);
-#endif
+                    dbg_cprintf(ANSI_INSTR " iaload\n" ANSI_RESET);
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
 
                     if (index->type == TYPE_NULL || array->type == TYPE_NULL) {
-                        freeOperand(index);
-                        freeOperand(array);
+                        freeAndNullOperand(&index);
+                        freeAndNullOperand(&array);
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
                     }
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len) {
-                        freeOperand(index);
-                        freeOperand(array);
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len) {
+                        freeAndNullOperand(&index);
+                        freeAndNullOperand(&array);
                         return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
                     }
 
-                    if (array->val.vref->data.array.data[index->val.vint])
-                        push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
+                    if (array->val.vref->array.data[index->val.vint])
+                        push(cur_frame, dupOperand(array->val.vref->array.data[index->val.vint]));
                     else {
                         tmpOp.val.vint = 0;
                         push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                     }
 
-                    freeOperand(array);
-                    freeOperand(index);
+                    freeAndNullOperand(&array);
+                    freeAndNullOperand(&index);
                 }
                 break;
             case 0x2f: /* laload */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " laload\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " laload\n" ANSI_RESET);
+
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
 
@@ -4029,14 +3656,14 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
                     }
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len) {
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len) {
                         freeOperand(array);
                         freeOperand(index);
                         return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
                     }
 
-                    if (array->val.vref->data.array.data[index->val.vint])
-                        push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
+                    if (array->val.vref->array.data[index->val.vint])
+                        push(cur_frame, dupOperand(array->val.vref->array.data[index->val.vint]));
                     else {
                         tmpOp.val.vlong = 0;
                         push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
@@ -4048,9 +3675,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x30: /* faload */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " faload\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " faload\n" ANSI_RESET);
+
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
 
@@ -4060,14 +3687,14 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
                     }
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len) {
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len) {
                         freeOperand(array);
                         freeOperand(index);
                         return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
                     }
 
-                    if (array->val.vref->data.array.data[index->val.vint])
-                        push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
+                    if (array->val.vref->array.data[index->val.vint])
+                        push(cur_frame, dupOperand(array->val.vref->array.data[index->val.vint]));
                     else {
                         tmpOp.val.vfloat = 0.0f;
                         push(cur_frame, newOperand(TYPE_FLOAT, &tmpOp.val.vfloat));
@@ -4079,9 +3706,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x31: /* daload */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " daload\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " daload\n" ANSI_RESET);
+
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
 
@@ -4091,14 +3718,14 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
                     }
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len) {
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len) {
                         freeOperand(array);
                         freeOperand(index);
                         return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
                     }
 
-                    if (array->val.vref->data.array.data[index->val.vint])
-                        push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
+                    if (array->val.vref->array.data[index->val.vint])
+                        push(cur_frame, dupOperand(array->val.vref->array.data[index->val.vint]));
                     else {
                         tmpOp.val.vdouble = 0.0f;
                         push(cur_frame, newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble));
@@ -4110,9 +3737,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x32: /* aaload */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " aaload\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " aaload\n" ANSI_RESET);
+
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
 
@@ -4122,14 +3749,15 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
                     }
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len) {
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len) {
+                        abort();
                         freeOperand(array);
                         freeOperand(index);
                         return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
                     }
 
-                    if (array->val.vref->data.array.data[index->val.vint])
-                        push(cur_frame, dupOperand(array->val.vref->data.array.data[index->val.vint]));
+                    if (array->val.vref->array.data[index->val.vint])
+                        push(cur_frame, dupOperand(array->val.vref->array.data[index->val.vint]));
                     else
                         push(cur_frame, newOperand(TYPE_NULL, NULL));
 
@@ -4142,26 +3770,26 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
 
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " baload\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " baload\n" ANSI_RESET);
+
                     if (index->type == TYPE_NULL || array->type == TYPE_NULL) {
                         freeOperand(array);
                         freeOperand(index);
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
                     }
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len) {
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len) {
                         freeOperand(array);
                         freeOperand(index);
                         return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
                     }
 
-                    if (array->val.vref->data.array.data[index->val.vint]) {
-                        if (array->val.vref->data.array.type == TYPE_BOOL)
-                            tmpOp.val.vint = array->val.vref->data.array.data[index->val.vint]->val.vbool;
+                    if (array->val.vref->array.data[index->val.vint]) {
+                        if (array->val.vref->array.type == TYPE_BOOL)
+                            tmpOp.val.vint = array->val.vref->array.data[index->val.vint]->val.vbool;
                         else
-                            tmpOp.val.vint = array->val.vref->data.array.data[index->val.vint]->val.vbyte;
+                            tmpOp.val.vint = array->val.vref->array.data[index->val.vint]->val.vbyte;
 
                         push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                     } else {
@@ -4183,18 +3811,18 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         freeOperand(array);
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
                     }
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " caload" ANSI_RESET " [%d] %s\n", index->val.vint,
-                            printOpType(array->val.vref->data.array.type));
-#endif
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len) {
+
+                    dbg_cprintf(ANSI_INSTR " caload" ANSI_RESET " [%d] %s\n", index->val.vint,
+                            printOpType(array->val.vref->array.type));
+
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len) {
                         freeOperand(index);
                         freeOperand(array);
-                        return throw(thread, "java.lang.IndexOutOfBoundsException", NULL, pc);
+                        return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
                     }
 
-                    if (array->val.vref->data.array.data[index->val.vint]) {
-                        tmpOp.val.vint = array->val.vref->data.array.data[index->val.vint]->val.vchar;
+                    if (array->val.vref->array.data[index->val.vint]) {
+                        tmpOp.val.vint = array->val.vref->array.data[index->val.vint]->val.vchar;
                         push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                     } else {
                         tmpOp.val.vint = 0;
@@ -4215,18 +3843,18 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         freeOperand(array);
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
                     }
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " saload" ANSI_RESET " [%d] %s\n", index->val.vint,
-                            printOpType(array->val.vref->data.array.type));
-#endif
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len) {
+
+                    dbg_cprintf(ANSI_INSTR " saload" ANSI_RESET " [%d] %s\n", index->val.vint,
+                            printOpType(array->val.vref->array.type));
+
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len) {
                         freeOperand(index);
                         freeOperand(array);
                         return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
                     }
 
-                    if (array->val.vref->data.array.data[index->val.vint]) {
-                        tmpOp.val.vint = array->val.vref->data.array.data[index->val.vint]->val.vshort;
+                    if (array->val.vref->array.data[index->val.vint]) {
+                        tmpOp.val.vint = array->val.vref->array.data[index->val.vint]->val.vshort;
                         push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                     } else {
                         tmpOp.val.vint = 0;
@@ -4246,12 +3874,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         is_wide = 0;
                     }
                     Operand *val = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " istore "ANSI_RESET" %s.%s => %d\n",
+
+                    dbg_cprintf(ANSI_INSTR " istore "ANSI_RESET" [%s %s] => %d\n",
                             printOpType(val->type),
                             printOpValue(val),
                             tmp);
-#endif
+
                     if(setLocal(cur_frame, tmp, val) == NULL) {
                         freeOperand(val);
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -4267,12 +3895,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         is_wide = 0;
                     }
                     Operand *val = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lstore "ANSI_RESET" %s.%s => %d\n",
+
+                    dbg_cprintf(ANSI_INSTR " lstore "ANSI_RESET" %s.%s => %d\n",
                             printOpType(val->type),
                             printOpValue(val),
                             tmp);
-#endif
+
                     if(setLocal(cur_frame, tmp, val) == NULL) {
                         freeOperand(val);
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -4288,12 +3916,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         is_wide = 0;
                     }
                     Operand *val = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fstore "ANSI_RESET"%s.%s => %d\n",
+
+                    dbg_cprintf(ANSI_INSTR " fstore "ANSI_RESET"%s.%s => %d\n",
                             printOpType(val->type),
                             printOpValue(val),
                             tmp);
-#endif
+
                     if(setLocal(cur_frame, tmp, val) == NULL) {
                         freeOperand(val);
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -4309,12 +3937,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         is_wide = 0;
                     }
                     Operand *val = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dstore "ANSI_RESET"%s.%s => %d\n",
+
+                    dbg_cprintf(ANSI_INSTR " dstore "ANSI_RESET"%s.%s => %d\n",
                             printOpType(val->type),
                             printOpValue(val),
                             tmp);
-#endif
+
                     if(setLocal(cur_frame, tmp, val) == NULL) {
                         freeOperand(val);
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -4330,12 +3958,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         is_wide = 0;
                     }
                     Operand *val = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " astore "ANSI_RESET"%s.%s => %d\n",
+
+                    dbg_cprintf(ANSI_INSTR " astore "ANSI_RESET"%s.%s => %d\n",
                             printOpType(val->type),
                             printOpValue(val),
                             tmp);
-#endif
+
                     if(setLocal(cur_frame, tmp, val) == NULL) {
                         freeOperand(val);
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -4345,10 +3973,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x3b: /* istore_0 */
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" istore_0 "  ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" istore_0 "  ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,0,a) == NULL) {
                         freeOperand(a);
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -4358,10 +3986,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x3c: /* istore_1*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " istore_1 "  ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " istore_1 "  ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,1,a) == NULL) {
                         freeOperand(a);
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -4371,10 +3999,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x3d: /* istore_2*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" istore_2 " ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" istore_2 " ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,2,a) == NULL) {
                         freeOperand(a);
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -4384,10 +4012,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x3e: /* istore_3*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" istore_3 " ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" istore_3 " ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,3,a) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4396,10 +4024,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x3f: /* lstore_0*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" lstore_0 " ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" lstore_0 " ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,0,a) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4407,10 +4035,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x40: /* lstore_1*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" lstore_1 " ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" lstore_1 " ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,1,a) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4418,10 +4046,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x41: /* lstore_2*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" lstore_2 " ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" lstore_2 " ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,2,a) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4429,10 +4057,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x42: /* lstore_3*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" lstore_3 " ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" lstore_3 " ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,3,a) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4441,10 +4069,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x43: /* fstore_0*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" fstore_0 " ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" fstore_0 " ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,0,a) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4452,10 +4080,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x44: /* fstore_1*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" fstore_1 " ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" fstore_1 " ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,1,a) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4463,10 +4091,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x45: /* fstore_2*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" fstore_2 " ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" fstore_2 " ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,2,a) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4474,10 +4102,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0x46: /* fstore_3*/
                 {
                     Operand *a = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" fstore_3 " ANSI_RESET);
-                    printf("<= %s %s\n", printOpType(a->type), printOpValue(a));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" fstore_3 " ANSI_RESET);
+                    dbg_cprintf("<= %s %s\n", printOpType(a->type), printOpValue(a));
+
                     if(setLocal(cur_frame,3,a) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4485,18 +4113,18 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x47: /* dstore_0 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "dstore_0\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "dstore_0\n" ANSI_RESET);
+
                     if(setLocal(cur_frame,0,pop(cur_frame)) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x48: /* dstore_1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "dstore_1\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "dstore_1\n" ANSI_RESET);
+
                     if(setLocal(cur_frame,1,pop(cur_frame)) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4504,9 +4132,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x49: /* dstore_2 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "dstore_2\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "dstore_2\n" ANSI_RESET);
+
                     if(setLocal(cur_frame,2,pop(cur_frame)) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
@@ -4514,70 +4142,72 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x4a: /* dstore_3 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "dstore_3\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "dstore_3\n" ANSI_RESET);
+
                     if(setLocal(cur_frame,3,pop(cur_frame)) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x4b: /* astore_0 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" astore_0\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" astore_0\n" ANSI_RESET);
+
                     if(setLocal(cur_frame,0,pop(cur_frame)) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x4c: /* astore_1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" astore_1\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" astore_1\n" ANSI_RESET);
+
                     if(setLocal(cur_frame,1,pop(cur_frame)) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x4d: /* astore_2 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" astore_2\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" astore_2\n" ANSI_RESET);
+
                     if(setLocal(cur_frame,2,pop(cur_frame)) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x4e: /* astore_3 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" astore_3\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" astore_3\n" ANSI_RESET);
+
                     if(setLocal(cur_frame,3,pop(cur_frame)) == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                 }
                 break;
             case 0x4f: /* iastore */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" iastore\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" iastore\n" ANSI_RESET);
+
                     Operand *value = pop(cur_frame);
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
 
+
                     if (index->type == TYPE_NULL || array->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len)
                         return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
-                    Operand *cur = array->val.vref->data.array.data[index->val.vint];
+                    Operand *cur = array->val.vref->array.data[index->val.vint];
                     if (cur)
                         freeOperand(cur);
 
-                    array->val.vref->data.array.data[index->val.vint] = value;
+                    array->val.vref->array.data[index->val.vint] = dupOperand(value);
 
+                    freeOperand(value);
                     freeOperand(index);
                     freeOperand(array);
                 }
@@ -4585,9 +4215,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x50: /* lastore */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" lastore\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" lastore\n" ANSI_RESET);
+
+                    Operand *value = pop(cur_frame);
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
 
@@ -4596,24 +4227,24 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
                     }
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len) {
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len) {
                         freeOperand(index); freeOperand(array);
                         return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
                     }
 
-                    Operand *value = pop(cur_frame);
 
                     if (value->type != array->type) {
                         freeOperand(index); freeOperand(array); freeOperand(value);
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     }
 
-                    Operand *cur = array->val.vref->data.array.data[index->val.vint];
+                    Operand *cur = array->val.vref->array.data[index->val.vint];
                     if (cur)
                         freeOperand(cur);
 
-                    array->val.vref->data.array.data[index->val.vint] = value;
+                    array->val.vref->array.data[index->val.vint] = dupOperand(value);
 
+                    freeOperand(value);
                     freeOperand(index);
                     freeOperand(array);
                 }
@@ -4621,9 +4252,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x51: /* fastore */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" fastore\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" fastore\n" ANSI_RESET);
+
                     Operand *value = pop(cur_frame);
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
@@ -4631,25 +4262,26 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     if (index->type == TYPE_NULL || array->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len)
                         return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
-                    Operand *cur = array->val.vref->data.array.data[index->val.vint];
+                    Operand *cur = array->val.vref->array.data[index->val.vint];
                     if (cur)
                         freeOperand(cur);
 
-                    array->val.vref->data.array.data[index->val.vint] = value;
+                    array->val.vref->array.data[index->val.vint] = dupOperand(value);
 
-                    freeOperand(index);
                     freeOperand(array);
+                    freeOperand(index);
+                    freeOperand(value);
                 }
                 break;
 
             case 0x52: /* dastore */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" dastore\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" dastore\n" ANSI_RESET);
+
                     Operand *value = pop(cur_frame);
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
@@ -4657,15 +4289,16 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     if (index->type == TYPE_NULL || array->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len)
                         return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
-                    Operand *cur = array->val.vref->data.array.data[index->val.vint];
+                    Operand *cur = array->val.vref->array.data[index->val.vint];
                     if (cur)
                         freeOperand(cur);
 
-                    array->val.vref->data.array.data[index->val.vint] = value;
+                    array->val.vref->array.data[index->val.vint] = dupOperand(value);
 
+                    freeOperand(value);
                     freeOperand(index);
                     freeOperand(array);
                 }
@@ -4679,22 +4312,22 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (index->type == TYPE_NULL || array->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " aastore " ANSI_RESET "[%d]\n",
+
+                    dbg_cprintf(ANSI_INSTR " aastore " ANSI_RESET "[%d]\n",
                             index->val.vint);
-#endif
-                    if (value->type != TYPE_NULL && array->val.vref->data.array.type != value->type) {
-                        warnx("aastore: %d != %d", value->type, array->val.vref->data.array.type);
+
+                    if (value->type != TYPE_NULL && array->val.vref->array.type != value->type) {
+                        warnx("aastore: %d != %d", value->type, array->val.vref->array.type);
                         warnx("aastore: invalid type");
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     }
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len)
                         return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
-                    if (array->val.vref->data.array.data[index->val.vint])
-                        freeOperand(array->val.vref->data.array.data[index->val.vint]);
-                    array->val.vref->data.array.data[index->val.vint] = dupOperand(value);
+                    if (array->val.vref->array.data[index->val.vint])
+                        freeOperand(array->val.vref->array.data[index->val.vint]);
+                    array->val.vref->array.data[index->val.vint] = dupOperand(value);
 
                     freeOperand(array);
                     freeOperand(index);
@@ -4710,25 +4343,25 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (index->type == TYPE_NULL || array->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " bastore " ANSI_RESET "%s %s => [%d][%s]\n",
+
+                    dbg_cprintf(ANSI_INSTR " bastore " ANSI_RESET "%s %s => [%d][%s]\n",
                             printOpType(value->type),
                             printOpValue(value),
                             index->val.vint,
-                            printOpType(array->val.vref->data.array.type));
-#endif
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+                            printOpType(array->val.vref->array.type));
+
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len)
                         return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
-                    if (value->type != TYPE_INT || (array->val.vref->data.array.type != TYPE_BYTE
-                                && array->val.vref->data.array.type != TYPE_BOOL) )
+                    if (value->type != TYPE_INT || (array->val.vref->array.type != TYPE_BYTE
+                                && array->val.vref->array.type != TYPE_BOOL) )
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
                     tmpOp.val.vbyte = (int8_t)value->val.vint;
 
-                    if (array->val.vref->data.array.data[index->val.vint])
-                        freeOperand(array->val.vref->data.array.data[index->val.vint]);
-                    array->val.vref->data.array.data[index->val.vint] =
+                    if (array->val.vref->array.data[index->val.vint])
+                        freeOperand(array->val.vref->array.data[index->val.vint]);
+                    array->val.vref->array.data[index->val.vint] =
                         newOperand(TYPE_BYTE, &tmpOp.val.vbyte);
 
                     freeOperand(array);
@@ -4744,24 +4377,25 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (index->type == TYPE_NULL || array->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " castore " ANSI_RESET "%s %s => [%d][%s]\n",
+
+                    dbg_cprintf(ANSI_INSTR " castore " ANSI_RESET "%s %s => [%d][%s]\n",
                             printOpType(value->type),
                             printOpValue(value),
                             index->val.vint,
-                            printOpType(array->val.vref->data.array.type));
-#endif
-                    if (value->type != TYPE_INT || array->val.vref->data.array.type != TYPE_CHAR)
+                            printOpType(array->val.vref->array.type));
+
+                    if (value->type != TYPE_INT || array->val.vref->array.type != TYPE_CHAR)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len)
                         return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
                     tmpOp.val.vchar = (uint16_t)value->val.vint;
 
-                    if (array->val.vref->data.array.data[index->val.vint])
-                        freeOperand(array->val.vref->data.array.data[index->val.vint]);
-                    array->val.vref->data.array.data[index->val.vint] = newOperand(TYPE_CHAR, &tmpOp.val.vchar);
+                    if (array->val.vref->array.data[index->val.vint])
+                        freeOperand(array->val.vref->array.data[index->val.vint]);
+                    array->val.vref->array.data[index->val.vint] = newOperand(TYPE_CHAR, &tmpOp.val.vchar);
+
                     freeOperand(array);
                     freeOperand(index);
                     freeOperand(value);
@@ -4769,9 +4403,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x56: /* sastore */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" sastore\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" sastore\n" ANSI_RESET);
+
                     Operand *value = pop(cur_frame);
                     Operand *index = pop(cur_frame);
                     Operand *array = pop(cur_frame);
@@ -4779,15 +4413,16 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     if (index->type == TYPE_NULL || array->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
-                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->data.array.len)
+                    if (index->val.vint < 0 || (uint32_t)(index->val.vint) > array->val.vref->array.len)
                         return throw(thread, "java.lang.IndexOutOfBoundsException", ERR_AT, pc);
 
-                    Operand *cur = array->val.vref->data.array.data[index->val.vint];
+                    Operand *cur = array->val.vref->array.data[index->val.vint];
                     if (cur)
                         freeOperand(cur);
 
-                    array->val.vref->data.array.data[index->val.vint] = value;
+                    array->val.vref->array.data[index->val.vint] = dupOperand(value);
 
+                    freeOperand(value);
                     freeOperand(index);
                     freeOperand(array);
                 }
@@ -4795,9 +4430,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x57: /* pop */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " pop\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " pop\n" ANSI_RESET);
+
                     Operand *op = pop(cur_frame);
                     freeOperand(op);
                 }
@@ -4805,11 +4440,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x58: /* pop2 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " pop\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " pop\n" ANSI_RESET);
+
                     Operand *op;
-                    
+
                     for(int i = 0; i < 2; i++) {
                         op = pop(cur_frame);
                         freeOperand(op);
@@ -4819,9 +4454,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x59: /* dup */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR" dup\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR" dup\n" ANSI_RESET);
+
                     Operand *cur = cur_frame->stack[cur_frame->sp-1];
                     Operand *new = dupOperand(cur);
                     push(cur_frame, new);
@@ -4830,9 +4465,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x5a: /* dup_x1 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dup_x1\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " dup_x1\n" ANSI_RESET);
+
                     Operand *val1 = pop(cur_frame);
                     Operand *val2 = pop(cur_frame);
                     push(cur_frame, dupOperand(val1));
@@ -4843,9 +4478,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x5c: /* dup2 */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dup2\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " dup2\n" ANSI_RESET);
+
                     Operand *val1 = pop(cur_frame);
                     if (val1->type == TYPE_DOUBLE || val1->type == TYPE_LONG) {
                         push(cur_frame, dupOperand(val1));
@@ -4862,9 +4497,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x5f: /* swap */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " swap\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " swap\n" ANSI_RESET);
+
 
                     Operand *val0 = pop(cur_frame);
                     Operand *val1 = pop(cur_frame);
@@ -4879,12 +4514,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vint = one->val.vint + two->val.vint;
                     Operand *res = newOperand(TYPE_INT, &tmpOp.val.vint);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " iadd " ANSI_RESET "%d+%d=%d\n",
+
+                    dbg_cprintf(ANSI_INSTR " iadd " ANSI_RESET "%d+%d=%d\n",
                             one->val.vint,
                             two->val.vint,
                             res->val.vint);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -4897,12 +4532,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vlong = one->val.vlong + two->val.vlong;
                     Operand *res = newOperand(TYPE_LONG, &tmpOp.val.vlong);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ladd " ANSI_RESET "%ld+%ld=%ld\n",
+
+                    dbg_cprintf(ANSI_INSTR " ladd " ANSI_RESET "%ld+%ld=%ld\n",
                             one->val.vlong,
                             two->val.vlong,
                             res->val.vlong);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -4915,12 +4550,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vfloat = one->val.vfloat + two->val.vfloat;
                     Operand *res = newOperand(TYPE_FLOAT, &tmpOp.val.vfloat);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fadd " ANSI_RESET "%f+%f=%f\n",
+
+                    dbg_cprintf(ANSI_INSTR " fadd " ANSI_RESET "%f+%f=%f\n",
                             one->val.vfloat,
                             two->val.vfloat,
                             res->val.vfloat);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -4933,12 +4568,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vdouble = one->val.vdouble + two->val.vdouble;
                     Operand *res = newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dadd " ANSI_RESET "%f+%f=%f\n",
+
+                    dbg_cprintf(ANSI_INSTR " dadd " ANSI_RESET "%f+%f=%f\n",
                             one->val.vdouble,
                             two->val.vdouble,
                             res->val.vdouble);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -4951,12 +4586,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vint = two->val.vint - one->val.vint;
                     Operand *res = newOperand(TYPE_INT, &tmpOp.val.vint);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " isub " ANSI_RESET "%d-%d=%d\n",
+
+                    dbg_cprintf(ANSI_INSTR " isub " ANSI_RESET "%d-%d=%d\n",
                             two->val.vint,
                             one->val.vint,
                             res->val.vint);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -4969,12 +4604,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vlong = two->val.vlong - one->val.vlong;
                     Operand *res = newOperand(TYPE_LONG, &tmpOp.val.vlong);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lsub " ANSI_RESET "%ld-%ld=%ld\n",
+
+                    dbg_cprintf(ANSI_INSTR " lsub " ANSI_RESET "%ld-%ld=%ld\n",
                             two->val.vlong,
                             one->val.vlong,
                             res->val.vlong);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -4987,12 +4622,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vfloat = two->val.vfloat - one->val.vfloat;
                     Operand *res = newOperand(TYPE_FLOAT, &tmpOp.val.vfloat);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fsub " ANSI_RESET "%f-%f=%f\n",
+
+                    dbg_cprintf(ANSI_INSTR " fsub " ANSI_RESET "%f-%f=%f\n",
                             two->val.vfloat,
                             one->val.vfloat,
                             res->val.vfloat);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -5005,12 +4640,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vdouble = two->val.vdouble - one->val.vdouble;
                     Operand *res = newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dsub " ANSI_RESET "%f-%f=%f\n",
+
+                    dbg_cprintf(ANSI_INSTR " dsub " ANSI_RESET "%f-%f=%f\n",
                             two->val.vdouble,
                             one->val.vdouble,
                             res->val.vdouble);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -5023,12 +4658,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vint = one->val.vint * two->val.vint;
                     Operand *res = newOperand(TYPE_INT, &tmpOp.val.vint);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " imul " ANSI_RESET "%d*%d=%d\n",
+
+                    dbg_cprintf(ANSI_INSTR " imul " ANSI_RESET "%d*%d=%d\n",
                             one->val.vint,
                             two->val.vint,
                             res->val.vint);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -5041,12 +4676,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vlong = one->val.vlong * two->val.vlong;
                     Operand *res = newOperand(TYPE_LONG, &tmpOp.val.vlong);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lmul " ANSI_RESET "%ld*%ld=%ld\n",
+
+                    dbg_cprintf(ANSI_INSTR " lmul " ANSI_RESET "%ld*%ld=%ld\n",
                             one->val.vlong,
                             two->val.vlong,
                             res->val.vlong);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -5056,9 +4691,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fmul" ANSI_RESET "\n");
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " fmul" ANSI_RESET "\n");
+
                     tmpOp.val.vfloat = one->val.vfloat * two->val.vfloat;
                     push(cur_frame, newOperand(TYPE_FLOAT, &tmpOp.val.vfloat));
 
@@ -5073,12 +4708,12 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     tmpOp.val.vdouble = one->val.vdouble * two->val.vdouble;
                     Operand *res = newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dmul " ANSI_RESET "%f*%f=%f\n",
+
+                    dbg_cprintf(ANSI_INSTR " dmul " ANSI_RESET "%f*%f=%f\n",
                             one->val.vdouble,
                             two->val.vdouble,
                             res->val.vdouble);
-#endif
+
                     push(cur_frame, res);
                     freeOperand(one);
                     freeOperand(two);
@@ -5089,11 +4724,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
                     tmpOp.val.vint = one->val.vint / two->val.vint;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " idiv" ANSI_RESET " %d/%d=%d\n",
+
+                    dbg_cprintf(ANSI_INSTR " idiv" ANSI_RESET " %d/%d=%d\n",
                             one->val.vint, two->val.vint,
                             tmpOp.val.vint);
-#endif
+
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                     freeOperand(one);
                     freeOperand(two);
@@ -5104,11 +4739,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
                     tmpOp.val.vlong = one->val.vlong / two->val.vlong;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ldiv" ANSI_RESET " %ld/%ld=%ld\n",
+
+                    dbg_cprintf(ANSI_INSTR " ldiv" ANSI_RESET " %ld/%ld=%ld\n",
                             one->val.vlong, two->val.vlong,
                             tmpOp.val.vlong);
-#endif
+
                     push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
                     freeOperand(one);
                     freeOperand(two);
@@ -5119,11 +4754,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
                     tmpOp.val.vfloat = one->val.vfloat / two->val.vfloat;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fdiv" ANSI_RESET " %f/%f=%f\n",
+
+                    dbg_cprintf(ANSI_INSTR " fdiv" ANSI_RESET " %f/%f=%f\n",
                             one->val.vfloat, two->val.vfloat,
                             tmpOp.val.vfloat);
-#endif
+
                     push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vfloat));
                     freeOperand(one);
                     freeOperand(two);
@@ -5134,11 +4769,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
                     tmpOp.val.vdouble = one->val.vdouble / two->val.vdouble;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ddiv" ANSI_RESET " %f/%f=%f\n",
+
+                    dbg_cprintf(ANSI_INSTR " ddiv" ANSI_RESET " %f/%f=%f\n",
                             one->val.vdouble, two->val.vdouble,
                             tmpOp.val.vdouble);
-#endif
+
                     push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vdouble));
                     freeOperand(one);
                     freeOperand(two);
@@ -5146,14 +4781,14 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x70: /* irem */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " irem\n" ANSI_RESET);
-#endif
+
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
 
                     int32_t value1 = one->val.vint;
                     int32_t value2 = two->val.vint;
+
+                    dbg_cprintf(ANSI_INSTR " irem " ANSI_RESET " %d, %d\n", value1, value2);
 
                     if (value2 == 0) {
                         return throw(thread, "java.lang.ArithmeticException", NULL, pc);
@@ -5168,9 +4803,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x71: /* lrem */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lrem\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lrem\n" ANSI_RESET);
+
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
 
@@ -5190,9 +4825,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x72: /* frem */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " frem\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " frem\n" ANSI_RESET);
+
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
 
@@ -5212,9 +4847,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x73: /* drem */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " drem\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " drem\n" ANSI_RESET);
+
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
 
@@ -5235,9 +4870,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x74: /* ineg */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "ineg\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "ineg\n" ANSI_RESET);
+
                     Operand *one = pop(cur_frame);
                     tmpOp.val.vint = -one->val.vint;
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
@@ -5246,9 +4881,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x75: /* lneg */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "lneg\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "lneg\n" ANSI_RESET);
+
                     Operand *one = pop(cur_frame);
                     tmpOp.val.vlong = -one->val.vlong;
                     push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
@@ -5257,9 +4892,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x76: /* fneg */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "fneg\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "fneg\n" ANSI_RESET);
+
                     Operand *one = pop(cur_frame);
                     tmpOp.val.vfloat = -one->val.vfloat;
                     push(cur_frame, newOperand(TYPE_FLOAT, &tmpOp.val.vfloat));
@@ -5268,9 +4903,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x77: /* dneg */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "dneg\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "dneg\n" ANSI_RESET);
+
                     Operand *one = pop(cur_frame);
                     tmpOp.val.vdouble = -one->val.vdouble;
                     push(cur_frame, newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble));
@@ -5281,9 +4916,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ishl\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " ishl\n" ANSI_RESET);
+
                     tmpOp.val.vint = one->val.vint << (two->val.vint & 0x1F);
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                     freeOperand(one);
@@ -5294,9 +4929,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lshl\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lshl\n" ANSI_RESET);
+
                     tmpOp.val.vlong = one->val.vlong << (two->val.vint & 0x3F);
                     push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
                     freeOperand(one);
@@ -5307,9 +4942,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ishr\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " ishr\n" ANSI_RESET);
+
                     tmpOp.val.vint = one->val.vint >> (two->val.vint & 0x1F);
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
 
@@ -5322,9 +4957,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lshr\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lshr\n" ANSI_RESET);
+
                     tmpOp.val.vlong = one->val.vlong >> (two->val.vint & 0x3F);
                     push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
 
@@ -5337,9 +4972,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " iushr\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " iushr\n" ANSI_RESET);
+
                     tmpOp.val.vint = ((uint32_t)one->val.vint) >> (two->val.vint & 0x1F);
                     freeOperand(one);
                     freeOperand(two);
@@ -5352,9 +4987,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lushr\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lushr\n" ANSI_RESET);
+
                     tmpOp.val.vlong = ((uint64_t)one->val.vlong) >> (two->val.vint & 0x3F);
                     freeOperand(one);
                     freeOperand(two);
@@ -5367,9 +5002,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0x7e: /* iand */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " iand\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " iand\n" ANSI_RESET);
+
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
 
@@ -5382,9 +5017,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x7f: /* land */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " land\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " land\n" ANSI_RESET);
+
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
 
@@ -5397,9 +5032,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x80: /* ior */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ior\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " ior\n" ANSI_RESET);
+
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
 
@@ -5412,9 +5047,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x81: /* lor */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lor\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lor\n" ANSI_RESET);
+
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
 
@@ -5427,9 +5062,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x82: /* ixor */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ixor\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " ixor\n" ANSI_RESET);
+
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
 
@@ -5442,9 +5077,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x83: /* lxor */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lxor\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lxor\n" ANSI_RESET);
+
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
 
@@ -5469,17 +5104,17 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         tmp2 += code[++pc];
                         is_wide = false;
                     }
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " iinc " ANSI_RESET "#%d,%d\n", tmp, tmp2);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " iinc " ANSI_RESET "#%d,%d\n", tmp, tmp2);
+
                     cur_frame->local[tmp]->val.vint += tmp2;
                 }
                 break;
             case 0x85: /* i2l */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " i2l\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " i2l\n" ANSI_RESET);
+
                     Operand *value = pop(cur_frame);
                     tmpOp.val.vlong = value->val.vint;
                     push(cur_frame, newOperand(TYPE_LONG, &tmpOp.val.vlong));
@@ -5504,9 +5139,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x88: /* l2i */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " l2i " ANSI_RESET "\n");
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " l2i " ANSI_RESET "\n");
+
                     Operand *value = pop(cur_frame);
                     tmpOp.val.vint = (int32_t)value->val.vlong;
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
@@ -5515,9 +5150,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x89: /* l2f */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " l2f " ANSI_RESET "\n");
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " l2f " ANSI_RESET "\n");
+
                     Operand *value = pop(cur_frame);
                     tmpOp.val.vfloat = (float)value->val.vlong;
                     push(cur_frame, newOperand(TYPE_FLOAT, &tmpOp.val.vdouble));
@@ -5526,9 +5161,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0x8a: /* l2d */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " l2d " ANSI_RESET "\n");
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " l2d " ANSI_RESET "\n");
+
                     Operand *value = pop(cur_frame);
                     tmpOp.val.vdouble = (double)value->val.vlong;
                     push(cur_frame, newOperand(TYPE_DOUBLE, &tmpOp.val.vdouble));
@@ -5587,10 +5222,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *val = pop(cur_frame);
                     tmpOp.val.vint = (uint8_t)(val->val.vint);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " i2b " ANSI_RESET "%d -> %d\n", val->val.vint,
+
+                    dbg_cprintf(ANSI_INSTR " i2b " ANSI_RESET "%d -> %d\n", val->val.vint,
                             tmpOp.val.vint);
-#endif
+
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                     freeOperand(val);
                 }
@@ -5599,10 +5234,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *val = pop(cur_frame);
                     tmpOp.val.vint = (uint16_t)(val->val.vint);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " i2c " ANSI_RESET "%d -> %u\n", val->val.vint,
+
+                    dbg_cprintf(ANSI_INSTR " i2c " ANSI_RESET "%d -> %u\n", val->val.vint,
                             tmpOp.val.vint);
-#endif
+
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                     freeOperand(val);
                 }
@@ -5611,10 +5246,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *val = pop(cur_frame);
                     tmpOp.val.vint = (int16_t)(val->val.vint);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " i2s " ANSI_RESET "%d -> %d\n", val->val.vint,
+
+                    dbg_cprintf(ANSI_INSTR " i2s " ANSI_RESET "%d -> %d\n", val->val.vint,
                             tmpOp.val.vint);
-#endif
+
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
                     freeOperand(val);
                 }
@@ -5623,10 +5258,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lcmp " ANSI_RESET "%ld ? %ld\n",
+
+                    dbg_cprintf(ANSI_INSTR " lcmp " ANSI_RESET "%ld ? %ld\n",
                             one->val.vlong, two->val.vlong);
-#endif
+
                     int32_t res = 0;
 
                     if (one->val.vlong > two->val.vlong) res = 1;
@@ -5643,11 +5278,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " fcmp%c " ANSI_RESET "%lf ? %lf\n",
+
+                    dbg_cprintf(ANSI_INSTR " fcmp%c " ANSI_RESET "%lf ? %lf\n",
                             opc == 0x95 ? 'l' : 'g',
                             one->val.vfloat, two->val.vfloat);
-#endif
+
                     int32_t res = 0;
 
                     if (isnan(one->val.vfloat) || isnan(two->val.vfloat))
@@ -5669,11 +5304,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *two = pop(cur_frame);
                     Operand *one = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " dcmp%c " ANSI_RESET "%lg ? %lg\n",
+
+                    dbg_cprintf(ANSI_INSTR " dcmp%c " ANSI_RESET "%lg ? %lg\n",
                             opc == 0x97 ? 'l' : 'g',
                             one->val.vdouble, two->val.vdouble);
-#endif
+
                     int32_t res = 0;
 
                     if (isnan(one->val.vdouble) || isnan(two->val.vdouble))
@@ -5696,11 +5331,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *o = pop(cur_frame);
 
 
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ifeq" ANSI_RESET " %s == 0 ? goto %lu\n",
+
+                    dbg_cprintf(ANSI_INSTR " ifeq" ANSI_RESET " %s == 0 ? goto %lu\n",
                             printOpValue(o),
                             pc + bra);
-#endif
+
                     if (o->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
@@ -5727,11 +5362,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     const int16_t bra = readBranch(code, &pc, 3);
                     Operand *o = pop(cur_frame);
 
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ifne" ANSI_RESET " %s != 0 ? goto %lu\n",
+
+                    dbg_cprintf(ANSI_INSTR " ifne" ANSI_RESET " %s != 0 ? goto %lu\n",
                             printOpValue(o),
                             pc + bra);
-#endif
+
                     if (o->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
@@ -5759,11 +5394,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (o->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " iflt" ANSI_RESET " %s < 0 ? goto %lu\n",
+
+                    dbg_cprintf(ANSI_INSTR " iflt" ANSI_RESET " %s < 0 ? goto %lu\n",
                             printOpValue(o),
                             pc + bra);
-#endif
+
 
                     switch(o->type)
                     {
@@ -5787,11 +5422,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (o->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ifge" ANSI_RESET " %s >= 0 ? goto %lu\n",
+
+                    dbg_cprintf(ANSI_INSTR " ifge" ANSI_RESET " %s >= 0 ? goto %lu\n",
                             printOpValue(o),
                             pc + bra);
-#endif
+
 
                     switch(o->type)
                     {
@@ -5816,11 +5451,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (o->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ifgt" ANSI_RESET " %s > 0 ? goto %lu\n",
+
+                    dbg_cprintf(ANSI_INSTR " ifgt" ANSI_RESET " %s > 0 ? goto %lu\n",
                             printOpValue(o),
                             pc + bra);
-#endif
+
 
                     switch(o->type)
                     {
@@ -5844,11 +5479,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (o->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ifle" ANSI_RESET " %s <= 0 ? goto %lu\n",
+
+                    dbg_cprintf(ANSI_INSTR " ifle" ANSI_RESET " %s <= 0 ? goto %lu\n",
                             printOpValue(o),
                             pc + bra);
-#endif
+
 
                     switch(o->type)
                     {
@@ -5877,11 +5512,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (one->val.vint == two->val.vint)
                         pc += bra;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " if_icmpne" ANSI_RESET " %d != %d ? goto %ld\n",
+
+                    dbg_cprintf(ANSI_INSTR " if_icmpne" ANSI_RESET " %d != %d ? goto %ld\n",
                             one->val.vint, two->val.vint,
                             pc + bra);
-#endif
+
                     freeOperand(one);
                     freeOperand(two);
 
@@ -5899,11 +5534,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (one->val.vint != two->val.vint)
                         pc += bra;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " if_icmpne" ANSI_RESET " %d != %d ? goto %ld\n",
+
+                    dbg_cprintf(ANSI_INSTR " if_icmpne" ANSI_RESET " %d != %d ? goto %ld\n",
                             one->val.vint, two->val.vint,
                             pc + bra);
-#endif
+
                     freeOperand(one);
                     freeOperand(two);
                 }
@@ -5917,11 +5552,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (two->type == TYPE_NULL || one->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " if_icmplt" ANSI_RESET " %d < %d ? goto %ld\n",
+
+                    dbg_cprintf(ANSI_INSTR " if_icmplt" ANSI_RESET " %d < %d ? goto %ld\n",
                             one->val.vint, two->val.vint,
                             pc + bra);
-#endif
+
                     if (one->val.vint < two->val.vint)
                         pc += bra;
 
@@ -5937,11 +5572,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (two->type == TYPE_NULL || one->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " if_icmpge" ANSI_RESET " %d >= %d ? goto %ld\n",
+
+                    dbg_cprintf(ANSI_INSTR " if_icmpge" ANSI_RESET " %d >= %d ? goto %ld\n",
                             one->val.vint, two->val.vint,
                             pc + bra);
-#endif
+
                     if (one->val.vint >= two->val.vint)
                         pc += bra;
 
@@ -5957,11 +5592,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (two->type == TYPE_NULL || one->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " if_icmpgt" ANSI_RESET " %d > %d ? goto %ld\n",
+
+                    dbg_cprintf(ANSI_INSTR " if_icmpgt" ANSI_RESET " %d > %d ? goto %ld\n",
                             one->val.vint, two->val.vint,
                             pc + bra);
-#endif
+
                     if (one->val.vint > two->val.vint)
                         pc += bra;
 
@@ -5978,11 +5613,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (two->type == TYPE_NULL || one->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " if_icmple" ANSI_RESET " %d <= %d ? goto %lu\n",
+
+                    dbg_cprintf(ANSI_INSTR " if_icmple" ANSI_RESET " %d <= %d ? goto %lu\n",
                             one->val.vint, two->val.vint,
                             pc + bra);
-#endif
+
                     if (one->val.vint <= two->val.vint)
                         pc += bra;
 
@@ -5999,10 +5634,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (two->type == TYPE_NULL || one->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " if_acmpeq" ANSI_RESET " ref == ref ? goto %lu\n",
+
+                    dbg_cprintf(ANSI_INSTR " if_acmpeq" ANSI_RESET " ref == ref ? goto %lu\n",
                             pc + bra);
-#endif
+
                     if (one->type == two->type && one->val.vref == two->val.vref)
                         pc += bra;
 
@@ -6019,10 +5654,10 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (two->type == TYPE_NULL || one->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " if_acmpne" ANSI_RESET " ref != ref ? goto %lu\n",
+
+                    dbg_cprintf(ANSI_INSTR " if_acmpne" ANSI_RESET " ref != ref ? goto %lu\n",
                             pc + bra);
-#endif
+
                     if (one->type == two->type && one->val.vref != two->val.vref)
                         pc += bra;
 
@@ -6034,9 +5669,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0xa7: /* goto */
                 {
                     int16_t bra = readBranch(code, &pc, 3);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " goto " ANSI_RESET " %d:%lu\n", bra, pc + bra);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " goto " ANSI_RESET " %d:%lu\n", bra, pc + bra);
+
                     pc += bra;
                 }
                 break;
@@ -6047,9 +5682,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *dest = getLocal(cur_frame, tmp);
                     if(dest->type != TYPE_RETADDR)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ret " ANSI_RESET "%d\n", dest->val.vint);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " ret " ANSI_RESET "%d\n", dest->val.vint);
+
                     /* TODO bounds check */
                     pc = dest->val.vint;
                 }
@@ -6066,9 +5701,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     const int32_t high = readInt(code, &pc);
 
                     Operand *v = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " tableswitch " ANSI_RESET "%d #%d->#%d on %d\n", def, low, high, v->val.vint);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " tableswitch " ANSI_RESET "%d #%d->#%d on %d\n", def, low, high, v->val.vint);
+
                     //const int32_t num_offsets = high - low + 1;
 
                     int32_t index = v->val.vint;
@@ -6089,9 +5724,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     int32_t def = readInt(code, &pc);
                     const int32_t npairs = readInt(code, &pc);
                     Operand *v = pop(cur_frame);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lookupswitch " ANSI_RESET "%d #%d == %d\n", def, npairs, v->val.vint);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lookupswitch " ANSI_RESET "%d #%d == %d\n", def, npairs, v->val.vint);
+
                     bool found = false;
                     for(int i = 0; i < npairs; i++) {
                         const int32_t match = readInt(code, &pc);
@@ -6107,9 +5742,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0xac: /* ireturn */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ireturn\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " ireturn\n" ANSI_RESET);
+
                     Operand *o = pop(cur_frame);
                     if (o == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     cur_frame->ret = o;
@@ -6118,9 +5753,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0xad: /* lreturn */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " lreturn\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " lreturn\n" ANSI_RESET);
+
                     Operand *o = pop(cur_frame);
                     if (o == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     cur_frame->ret = o;
@@ -6129,9 +5764,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0xae: /* freturn */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "freturn\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "freturn\n" ANSI_RESET);
+
                     Operand *o = pop(cur_frame);
                     if (o == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     cur_frame->ret = o;
@@ -6140,9 +5775,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 break;
             case 0xaf: /* dreturn */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR "dreturn\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR "dreturn\n" ANSI_RESET);
+
                     Operand *o = pop(cur_frame);
                     if (o == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     cur_frame->ret = o;
@@ -6153,44 +5788,44 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     Operand *o = pop(cur_frame);
                     if (o == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " areturn " ANSI_RESET);
-                    printf("%s %s\n", printOpType(o->type), printOpValue(o));
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " areturn " ANSI_RESET);
+                    dbg_cprintf("%s %s\n", printOpType(o->type), printOpValue(o));
+
                     cur_frame->ret = o;
                     running = false;
                 }
                 break;
             case 0xb1: /* return */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " return\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " return\n" ANSI_RESET);
+
                     running = false;
                 }
                 break;
             case 0xb2: /* getstatic */
                 {
                     tmpw = readShort(code, &pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " getstatic" ANSI_RESET " #%d ", tmpw);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " getstatic" ANSI_RESET " #%d ", tmpw);
+
                     field_info *f = NULL;
                     if ((ex_opr = getFieldInfo(thread, cls, tmpw, &f)) != NULL)
                         return ex_opr;
                     if (f == NULL)
                         errx(EXIT_FAILURE, "getstatic: can't find field");
-#ifdef DEBUG_CODE
-                    printf("got field_info '%s' '%s' ",
-                            f->name->d.utf8.ascii,
-                            f->descriptor->d.utf8.ascii);
-#endif
+
+                    dbg_cprintf("got field_info '%s' '%s' ",
+                            f->name->utf8.ascii,
+                            f->descriptor->utf8.ascii);
+
                     if (f->static_operand) {
-#ifdef DEBUG_CODE
-                        printf("contents %s %s\n",
+
+                        dbg_cprintf("contents %s %s\n",
                                 printOpType(f->static_operand->type),
                                 printOpValue(f->static_operand));
-#endif
+
                         if(!push(cur_frame, dupOperand(f->static_operand)))
                             return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     } else {
@@ -6202,9 +5837,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0xb3: /* putstatic */
                 {
                     tmpw = readShort(code, &pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " putstatic" ANSI_RESET " #%d ", tmpw);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " putstatic" ANSI_RESET " #%d ", tmpw);
+
                     field_info *f = NULL;
 
                     if ((ex_opr = getFieldInfo(thread, cls, tmpw, &f)) != NULL)
@@ -6212,11 +5847,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     if (f == NULL)
                         errx(EXIT_FAILURE, "putstatic: no field");
-#ifdef DEBUG_CODE
-                    printf("got field_info '%s' '%s'\n",
-                            f->name->d.utf8.ascii,
-                            f->descriptor->d.utf8.ascii);
-#endif
+
+                    dbg_cprintf("got field_info '%s' '%s'\n",
+                            f->name->utf8.ascii,
+                            f->descriptor->utf8.ascii);
+
                     Operand *value = pop(cur_frame);
                     if (value == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
@@ -6232,9 +5867,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     field_info *fi = NULL;
                     if ((ex_opr = getFieldInfo(thread, cls, tmpw, &fi)) != NULL)
                         return ex_opr;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " getfield" ANSI_RESET " #%d ", tmpw);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " getfield" ANSI_RESET " #%d ", tmpw);
+
                     if (fi == NULL) {
                         errx(EXIT_FAILURE, "getfield: no field\n");
                         break;
@@ -6244,24 +5879,30 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     if (o->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
-#ifdef DEBUG_CODE
-                    printf("to: field_info '%s' '%s'\nto: %s %s\n",
-                            fi->name->d.utf8.ascii,
-                            fi->descriptor->d.utf8.ascii,
+
+                    dbg_cprintf("to: field_info '%s' '%s'\nto: %s %s\n",
+                            fi->name->utf8.ascii,
+                            fi->descriptor->utf8.ascii,
                             printOpType(o->type),
                             printOpValue(o)
                           );
-#endif
+
 
                     Object *obj = o->val.vref;
 
                     Field *fld = NULL;
-                    for (int i = 0; i < obj->data.obj.num_fields; i++)
-                        if(fi == obj->data.obj.fields[i].field_info)
-                            fld = &obj->data.obj.fields[i];
+                    for (int i = 0; i < obj->obj.num_fields; i++)
+                        if(fi == obj->obj.fields[i].field_info)
+                            fld = &obj->obj.fields[i];
 
-                    if (fld == NULL)
-                        errx(EXIT_FAILURE, "getfield: Can't find field");
+                    if (fld == NULL) {
+                        warnx("getfield: Can't find field %s %s in %s",
+                                fi->name->utf8.ascii,
+                                fi->descriptor->utf8.ascii,
+                                getClassName(obj->class->this_class));
+                        //abort();
+                        return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
+                    }
 
                     Operand *retop = (fld->op == NULL) ?
                         newOperand(TYPE_NULL, NULL) :
@@ -6284,21 +5925,21 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     if ((ex_opr = getFieldInfo(thread, cls, tmpw,
                                     (field_info **)&fi)) != NULL)
                         return ex_opr;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " putfield " ANSI_RESET " #%d ", tmpw);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " putfield " ANSI_RESET " #%d ", tmpw);
+
                     if (fi == NULL) {
                         errx(EXIT_FAILURE, "putfield: no field");
                         break;
                     }
                     Operand *value = pop(cur_frame);
                     if (value == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(" from: %s %s", printOpType(value->type), printOpValue(value));
-                    printf(" to  : %s %s\n",
-                            fi->name->d.utf8.ascii,
-                            fi->descriptor->d.utf8.ascii);
-#endif
+
+                    dbg_cprintf(" from: %s %s", printOpType(value->type), printOpValue(value));
+                    dbg_cprintf(" to  : %s %s\n",
+                            fi->name->utf8.ascii,
+                            fi->descriptor->utf8.ascii);
+
                     Operand *o = pop(cur_frame);
                     if (o->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
@@ -6311,14 +5952,14 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         __asm__("int $3");
                     }
 
-                    for (int i = 0; i < obj->data.obj.num_fields; i++) {
-                        if(fi == obj->data.obj.fields[i].field_info)
-                            fld = &obj->data.obj.fields[i];
+                    for (int i = 0; i < obj->obj.num_fields; i++) {
+                        if(fi == obj->obj.fields[i].field_info)
+                            fld = &obj->obj.fields[i];
                     }
 
                     if (fld == NULL) {
                         warnx("putfield: unknown field: %s %s",
-                                fi->name->d.utf8.ascii, fi->descriptor->d.utf8.ascii);
+                                fi->name->utf8.ascii, fi->descriptor->utf8.ascii);
                         __asm__("int $3");
                     }
 
@@ -6331,23 +5972,38 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0xb6: /* invokevirtual */
                 {
                     tmpw = readShort(code, &pc);
-                    cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " invokevirtual" ANSI_RESET " #%d ", tmpw);
-                    printf("method_info %s %s %s\n",
-                            mi->class->d.class.name->d.utf8.ascii,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii);
-#endif
-                    /* used for num meths only */
-                    method_info *meth = findClassMethod(thread,
-                            mi->class->d.class.name->d.utf8.ascii,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii);
+                    cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->fr;
 
-                    if (meth == NULL)
-                        return throw(thread, "java.lang.ClassNotFoundException",
-                                mi->class->d.class.name->d.utf8.ascii, pc);
+                    dbg_printf(ANSI_INSTR " invokevirtual" ANSI_RESET " #%d ", tmpw);
+                    dbg_printf("method_info %s %s %s\n",
+                            getClassName(mi->class),
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii);
+
+                    /* used for num meths only */
+                    method_info *meth;
+
+                    meth = findClassMethod(thread,
+                            getClassName(mi->class),
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii,
+                            INVOKE_VIRTUAL);
+
+                    if (meth == NULL) {
+                        printf("invokevirtual: #%d: NULL method: %s.%s on %s\n",
+                                tmpw,
+                                mi->nametype->nt.name->utf8.ascii,
+                                mi->nametype->nt.descriptor->utf8.ascii,
+                                getClassName(mi->class));
+#ifdef DEBUG
+                        dumpFrame(cur_frame);
+#endif
+                        abort();
+                        return throw(thread, "java.lang.NoSuchMethodException",
+                                getClassName(mi->class), pc);
+                    }
+
+                    mi->meth_cache = meth;
 
                     if (cur_frame->sp <= meth->desc.num_params)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -6361,40 +6017,47 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Object *this = op_obj->val.vref;
                     if (!this) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
-                    meth = findMethodByClass(thread,
+                    /*if (mi->meth_cache2)
+                        meth = mi->meth_cache2;
+                    else*/
+                        meth = findMethodByClass(thread,
                             this->class,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii);
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii,
+                            INVOKE_VIRTUAL);
 
                     if (meth == NULL) {
                         warnx("findMethodByClass failed: %s %s %s",
-                                this->class->this_class->d.class.name->d.utf8.ascii,
-                                mi->nametype->d.nt.name->d.utf8.ascii,
-                                mi->nametype->d.nt.descriptor->d.utf8.ascii);
+                                this->class ? getClassName(this->class->this_class) :
+                                "(NULL this->class)",
+                                mi->nametype->nt.name->utf8.ascii,
+                                mi->nametype->nt.descriptor->utf8.ascii);
 
                         return throw(thread, "java.lang.AbstractMethodError",
                                 NULL, pc);
                     }
+
+                    mi->meth_cache2 = meth;
 
                     if (!this->class) {
                         Operand *ret = classInit(thread, (ClassFile *)this->class);
                         if (ret != NULL) return ret;
                     }
 
-#ifdef DEBUG_CODE
-                    printf("           [%s.%s%s] => %s.%s%s on %s\n",
-                            mi->class->d.class.name->d.utf8.ascii,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii,
-                            meth->class->this_class->d.class.name->d.utf8.ascii,
-                            meth->name->d.utf8.ascii,
-                            meth->descriptor->d.utf8.ascii,
-                            this->class ?
-                            this->class->this_class->d.class.name->d.utf8.ascii :
-                            "(array)");
-#endif
 
-                    if ((ex_opr = invokeMethod(thread, meth, true, pc)) != NULL)
+                    dbg_cprintf("           [%s.%s%s] => %s.%s%s on %s\n",
+                            getClassName(mi->class),
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii,
+                            getClassName(meth->class->this_class),
+                            meth->name->utf8.ascii,
+                            meth->descriptor->utf8.ascii,
+                            this->class ?
+                            getClassName(this->class->this_class) :
+                            "(array)");
+
+
+                    if ((ex_opr = invokeMethod(thread, meth, true, pc, INVOKE_VIRTUAL)) != NULL)
                         return ex_opr;
 
                 }
@@ -6402,18 +6065,31 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0xb7: /* invokespecial */
                 {
                     tmpw = readShort(code, &pc);
-                    cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " invokespecial" ANSI_RESET " #%d ", tmpw);
-                    printf("method_info special: %s:%s %s\n",
-                            mi->class->d.class.name->d.utf8.ascii,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii);
-#endif
-                    method_info *meth = findClassMethod(thread,
-                            mi->class->d.class.name->d.utf8.ascii,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii);
+                    cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->fr;
+
+                    dbg_cprintf(ANSI_INSTR " invokespecial" ANSI_RESET " #%d ", tmpw);
+                    dbg_cprintf("method_info special: %s:%s %s\n",
+                            getClassName(mi->class),
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii);
+
+                    method_info *meth;
+
+                    /*if (mi->meth_cache_special)
+                        meth = mi->meth_cache_special;
+                    else*/
+                        meth = findClassMethod(thread,
+                            getClassName(mi->class),
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii,
+                            INVOKE_SPECIAL);
+
+                    if (meth == NULL) {
+                        /* TODO add warn as per above */
+                        return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
+                    }
+
+                    mi->meth_cache_special = meth;
 
                     if (cur_frame->sp <= meth->desc.num_params)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -6432,131 +6108,158 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                         if (ret != NULL) return ret;
                     }
 
-                    if (meth == NULL)
+                    if (meth == NULL) {
+                        warnx("findMethodByClass failed: %s %s %s",
+                                this->class ? getClassName(this->class->this_class) :
+                                "(NULL this->class)",
+                                mi->nametype->nt.name->utf8.ascii,
+                                mi->nametype->nt.descriptor->utf8.ascii);
                         return throw(thread, "java.lang.AbstractMethodError", NULL, pc);
-#ifdef DEBUG_CODE
-                    printf("           [%s.%s%s] => %s.%s%s on %s\n",
-                            mi->class->d.class.name->d.utf8.ascii,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii,
-                            meth->class->this_class->d.class.name->d.utf8.ascii,
-                            meth->name->d.utf8.ascii,
-                            meth->descriptor->d.utf8.ascii,
-                            this->class->this_class->d.class.name->d.utf8.ascii);
-#endif
+                    }
 
-                    if ((ex_opr = invokeMethod(thread, meth, true, pc)) != NULL)
+                    dbg_cprintf("           [%s.%s%s] => %s.%s%s on %s\n",
+                            getClassName(mi->class),
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii,
+                            getClassName(meth->class->this_class),
+                            meth->name->utf8.ascii,
+                            meth->descriptor->utf8.ascii,
+                            getClassName(this->class->this_class));
+
+
+                    if ((ex_opr = invokeMethod(thread, meth, true, pc, INVOKE_SPECIAL)) != NULL)
                         return ex_opr;
                 }
                 break;
             case 0xb8: /* invokestatic */
                 {
                     tmpw = readShort(code, &pc);
-                    cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " invokestatic" ANSI_RESET " #%d ", tmpw);
-                    printf("method_info static %s:%s %s\n",
-                            mi->class->d.class.name->d.utf8.ascii,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii);
-#endif
+                    cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->fr;
+
+                    dbg_cprintf(ANSI_INSTR " invokestatic" ANSI_RESET " #%d ", tmpw);
+                    dbg_cprintf("method_info static %s:%s %s\n",
+                            getClassName(mi->class),
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii);
+
                     /* class containing static mehtod */
                     ClassFile *class = (ClassFile *)findClass(thread,
-                            mi->class->d.class.name->d.utf8.ascii);
+                            getClassName(mi->class), NULL);
+
+                    method_info *meth;
 
                     /* static method */
-                    method_info *meth = findClassMethod(thread,
-                            mi->class->d.class.name->d.utf8.ascii,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii);
+                    if (mi->meth_cache_static)
+                        meth = mi->meth_cache_static;
+                    else
+                        meth = findClassMethod(thread,
+                            getClassName(mi->class),
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii,
+                            INVOKE_STATIC);
 
-                    if (meth == NULL)
+                    if (meth == NULL) {
+                        warnx("findClassMethod failed: %s %s %s",
+                                getClassName(mi->class),
+                                mi->nametype->nt.name->utf8.ascii,
+                                mi->nametype->nt.descriptor->utf8.ascii);
                         return throw(thread, "java.lang.AbstractMethodError", ERR_AT, pc);
+                    }
+
+                    mi->meth_cache_static = meth;
 
                     if(!class->isInit) {
                         Operand *ret = classInit(thread, (ClassFile *)class);
                         if (ret != NULL) return ret;
                     }
 
-                    if ((ex_opr = invokeMethod(thread, meth, false, pc)) != NULL)
+                    if ((ex_opr = invokeMethod(thread, meth, false, pc, INVOKE_STATIC)) != NULL)
                         return ex_opr;
                 }
                 break;
             case 0xb9: /* invokeinterface */
                 {
                     tmpw = readShort(code, &pc);
-                    cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->d.fr;
-                    pc++; // skip first field, which has a value
+                    cp_Fieldref_info *mi = &cls->constant_pool[tmpw]->fr;
+                    tmp = code[++pc]; // count
                     pc++; // skip blank field
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " invokeinterface " ANSI_RESET " #%d,%d\n", tmpw, tmp);
-                    printf("method_info interface %s:%s %s\n",
-                            mi->class->d.class.name->d.utf8.ascii,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii);
 
+                    dbg_cprintf(ANSI_INSTR " invokeinterface " ANSI_RESET " #%d,%d\n", tmpw, tmp);
+                    dbg_cprintf("(method_info interface %s:%s %s)\n",
+                            getClassName(mi->class),
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii);
+
+#ifdef DEBUG
+                    dumpFrame(cur_frame);
 #endif
-                    /* interface method defintion (for param count) */
-                    method_info *meth = findClassMethod(thread,
-                            mi->class->d.class.name->d.utf8.ascii,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii);
-
-                    if (meth == NULL) {
-                        warnx("invokeinterface: %s.%s%s missing",
-                                mi->class->d.class.name->d.utf8.ascii,
-                                mi->nametype->d.nt.name->d.utf8.ascii,
-                                mi->nametype->d.nt.descriptor->d.utf8.ascii);
-                        return throw(thread, "java.lang.AbstractMethodError", ERR_AT, pc);
-                    }
-
-                    if (cur_frame->sp <= meth->desc.num_params)
-                        return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
-
-                    Operand *op_obj = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
+                    Operand *op_obj = peeknth(cur_frame, tmp - 1);
                     if (op_obj->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
                     Object *this = op_obj->val.vref;
                     if (!this) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
-                    /* actual method instance in implementing class */
-                    meth = findMethodByClass(thread,
-                            this->class,
-                            mi->nametype->d.nt.name->d.utf8.ascii,
-                            mi->nametype->d.nt.descriptor->d.utf8.ascii);
-                    if (meth == NULL)
-                        return throw(thread, "java.lang.AbstractMethodError",
-                                ERR_AT, pc);
-
-#ifdef DEBUG_CODE
-                    printf("actual method: %s.%s%s\n",
-                            this->class->this_class->d.class.name->d.utf8.ascii,
-                            meth->name->d.utf8.ascii,
-                            meth->descriptor->d.utf8.ascii);
-#endif
                     if (!this->class) {
                         Operand *ret = classInit(thread, (ClassFile *)this->class);
                         if (ret != NULL) return ret;
                     }
-#ifdef DEBUG_CODE
-                    printf("invoking\n");
+
+                    method_info *meth = findMethodByClass(thread,
+                            this->class,
+                            mi->nametype->nt.name->utf8.ascii,
+                            mi->nametype->nt.descriptor->utf8.ascii,
+                            INVOKE_INTERFACE);
+
+                    if (meth == NULL) {
+                        warnx("invokeinterface: %s [%s %s] missing",
+                                getClassName(this->class->this_class),
+                                mi->nametype->nt.name->utf8.ascii,
+                                mi->nametype->nt.descriptor->utf8.ascii);
+#ifdef DEBUG
+                        dumpFrame(cur_frame);
 #endif
-                    if ((ex_opr = invokeMethod(thread, meth, true, pc)) != NULL)
+                        abort();
+                        return throw(thread, "java.lang.AbstractMethodError", ERR_AT, pc);
+                    } 
+
+                    if (cur_frame->sp <= meth->desc.num_params)
+                        return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
+                    
+                    if ((ex_opr = invokeMethod(thread, meth, true, pc, INVOKE_INTERFACE)) != NULL)
                         return ex_opr;
+                }
+                break;
+            case 0xba: /* invokedynamic PARTIAL */
+                {
+                    tmpw = readShort(code, &pc);
+                    pc++; /* skip 0 */
+                    pc++; /* skip 0 */
+
+                    cp_InvokeDynamic_info *idi = &cls->constant_pool[tmpw]->id;
+
+                    printf(ANSI_INSTR " invokedynamic " ANSI_RESET " #%d,%d\n", tmpw, tmp);
+                    printf(" %s%s\n",
+                            idi->nametype->nt.name->utf8.ascii,
+                            idi->nametype->nt.descriptor->utf8.ascii
+                            );
+
+                    errx(EXIT_FAILURE, "invokedynamic is not fully supported\n");
                 }
                 break;
             case 0xbb: /* new */
                 {
                     tmpw = readShort(code, &pc);
-                    cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " new " ANSI_RESET "#%d ", tmpw);
-                    printf("class %s\n", ci->name->d.utf8.ascii);
-#endif
-                    ClassFile *tmpcls = findClass(thread, ci->name->d.utf8.ascii);
-                    if (tmpcls == NULL)
+                    cp_Class_info *ci = &cls->constant_pool[tmpw]->class;
+
+                    dbg_cprintf(ANSI_INSTR " new " ANSI_RESET "#%d ", tmpw);
+                    dbg_cprintf("class %s\n", ci->name->utf8.ascii);
+
+                    ClassFile *tmpcls = findClass(thread, ci->name->utf8.ascii, NULL);
+                    if (tmpcls == NULL) {
+                        printf("new failed\n");
                         return throw(thread, "java.lang.ClassNotFoundException", ERR_AT, pc);
+                    }
                     Object *newObj = newObject(thread, tmpcls);
                     Operand *newOp = newOperand(TYPE_OREF, newObj);
 
@@ -6570,10 +6273,9 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0xbc: /* newarray */
                 {
                     tmp = code[++pc];
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " newarray " ANSI_RESET "#%d \n", tmp);
-                    dumpFrame(cur_frame);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " newarray " ANSI_RESET "#%d \n", tmp);
+
                     Operand *cnt = pop(cur_frame);
                     if (cnt == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     if (cnt->type == TYPE_NULL)
@@ -6585,19 +6287,20 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     }
 
                     Object *arr = newArray(thread, atypemap[tmp], cnt->val.vint, NULL);
+                    freeOperand(cnt);
+
                     if (arr == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     if (!push(cur_frame, newOperand(TYPE_AREF, arr)))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
-                    freeOperand(cnt);
                 }
                 break;
             case 0xbd: /* anewarray */
                 {
                     tmpw = readShort(code, &pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " anewarray " ANSI_RESET "#%d \n", tmpw);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " anewarray " ANSI_RESET "#%d \n", tmpw);
+
                     Operand *cnt = pop(cur_frame);
                     if (cnt == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     if (cnt->type == TYPE_NULL)
@@ -6609,44 +6312,45 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     }
 
                     // FIXME store class from cp[tmpw]
-                    ClassFile *class = findClass(thread, cls->constant_pool[tmpw]->d.class.name->d.utf8.ascii);
-                    if (class == NULL)
+                    ClassFile *class = findClass(thread, getClassName(cls->constant_pool[tmpw]), NULL);
+                    if (class == NULL) {
+                        printf("anewarray failed\n");
                         return throw(thread, "java.lang.ClassNotFoundException", ERR_AT, pc);
+                    }
 
                     Object *arr = newArray(thread, TYPE_OREF, cnt->val.vint, class);
+                    freeOperand(cnt);
                     if (arr == NULL)
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
                     if (!push(cur_frame, newOperand(TYPE_AREF, arr)))
                         return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
-                    freeOperand(cnt);
                 }
                 break;
             case 0xbe: /* arraylength */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " arraylength " ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " arraylength " ANSI_RESET);
+
                     Operand *op_array = pop(cur_frame);
                     if (op_array == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     if (op_array->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
 
                     Object *array = op_array->val.vref;
-#ifdef DEBUG_CODE
-                    printf("= %d\n", array->data.array.len);
-#endif
-                    if (!push(cur_frame, newOperand(TYPE_INT,
-                                    &array->data.array.len)))
+
+                    dbg_cprintf("= %d\n", array->array.len);
+
+                    if (!push(cur_frame, newOperand(TYPE_INT, &array->array.len)))
                         errx(EXIT_FAILURE, "arraylength: stack full");
                     freeOperand(op_array);
                 }
                 break;
             case 0xbf: /* athrow */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " athrow " ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " athrow " ANSI_RESET);
+
                     Operand *ex = pop(cur_frame);
                     Operand *ex_opr = NULL;
                     Operand *tmpop = NULL;
@@ -6657,14 +6361,13 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
                     while(cur_frame->sp > 0 && (tmpop = pop(cur_frame)) != NULL)
                         freeOperand(tmpop);
-                    //warnx("runCode: throw: %s", ex->val.vref->class->this_class->d.class.name->d.utf8.ascii);
 
                     method_info *mi = findMethodByClass(thread, ex->val.vref->class,
-                            "fillInStackTrace", "()Ljava.lang.Throwable;");
+                            "fillInStackTrace", "()Ljava.lang.Throwable;", INVOKE_VIRTUAL);
 
                     push(cur_frame, dupOperand(ex));
 
-                    if ((ex_opr = invokeMethod(thread, mi, true, pc)) != NULL)
+                    if ((ex_opr = invokeMethod(thread, mi, true, pc, INVOKE_VIRTUAL)) != NULL)
                         return ex_opr;
                     else {
                         return ex;
@@ -6674,19 +6377,19 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0xc0: /* checkcast */
                 {
                     tmpw = readShort(code, &pc);
-                    cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
+                    cp_Class_info *ci = &cls->constant_pool[tmpw]->class;
                     Operand *ref = pop(cur_frame);
                     if (ref == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
 
                     /* val.vref check for casting null to something */
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " checkcast " ANSI_RESET "%s >= %s\n",
-                            ref->val.vref ? ref->val.vref->class->this_class->d.class.name->d.utf8.ascii : "null",
-                            ci->name->d.utf8.ascii);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " checkcast " ANSI_RESET "%s >= %s\n",
+                            ref->val.vref ? getClassName(ref->val.vref->class->this_class) : "null",
+                            ci->name->utf8.ascii);
+
                     if (!canCast(thread,
-                                ref->val.vref ? ref->val.vref->class->this_class->d.class.name->d.utf8.ascii : NULL,
-                                ci->name->d.utf8.ascii))
+                                ref->val.vref ? getClassName(ref->val.vref->class->this_class) : NULL,
+                                ci->name->utf8.ascii))
                         return throw(thread, "java.lang.ClassCastException", NULL, pc);
                     push(cur_frame, ref);
                 }
@@ -6694,15 +6397,15 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0xc1: /* instanceof */
                 {
                     tmpw = readShort(code, &pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " instanceof\n" ANSI_RESET);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " instanceof\n" ANSI_RESET);
+
                     Operand *ref = pop(cur_frame);
                     if (ref == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
                     if (ref->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-                    cp_Class_info *ci = &cls->constant_pool[tmpw]->d.class;
-                    tmpOp.val.vint = ref->val.vref->class == findClass(thread, ci->name->d.utf8.ascii);
+                    cp_Class_info *ci = &cls->constant_pool[tmpw]->class;
+                    tmpOp.val.vint = ref->val.vref->class == findClass(thread, ci->name->utf8.ascii, NULL);
 
                     push(cur_frame, newOperand(TYPE_INT, &tmpOp.val.vint));
 
@@ -6714,11 +6417,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *lock = pop(cur_frame);
                     if (lock->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " monitorenter " ANSI_RESET " %s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " monitorenter " ANSI_RESET " %s %s\n",
                             printOpType(lock->type),
                             printOpValue(lock));
-#endif
+
                     if (lock->type != TYPE_OREF && lock->type != TYPE_AREF)
                         errx(EXIT_FAILURE, "monitorenter on invalid type");
 
@@ -6740,11 +6443,11 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                     Operand *lock = pop(cur_frame);
                     if (lock->type == TYPE_NULL)
                         return throw(thread, "java.lang.NullPointerException", ERR_AT, pc);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " monitorexit " ANSI_RESET " %s %s\n",
+
+                    dbg_cprintf(ANSI_INSTR " monitorexit " ANSI_RESET " %s %s\n",
                             printOpType(lock->type),
                             printOpValue(lock));
-#endif
+
                     if (lock->type != TYPE_OREF && lock->type != TYPE_AREF)
                         errx(EXIT_FAILURE, "monitorexit on invalid type");
 
@@ -6771,15 +6474,15 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                 {
                     tmpw = readShort(code, &pc);
                     uint8_t dim  = code[++pc];
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " multianewarray " ANSI_RESET "#%d[%d] \n", tmpw, dim);
-                    dumpFrame(cur_frame);
-#endif
+
+                    dbg_cprintf(ANSI_INSTR " multianewarray " ANSI_RESET "#%d[%d] \n", tmpw, dim);
 
                     // FIXME store class from cp[tmpw]
-                    ClassFile *class = findClass(thread, cls->constant_pool[tmpw]->d.class.name->d.utf8.ascii);
-                    if (class == NULL)
+                    ClassFile *class = findClass(thread, getClassName(cls->constant_pool[tmpw]), NULL);
+                    if (class == NULL) {
+                        printf("multianewarray failed\n");
                         return throw(thread, "java.lang.ClassNotFoundException", ERR_AT, pc);
+                    }
 
                     /* need to pop tmp dimensions values off the op stack */
                     int32_t *sizes = calloc(dim + 1, sizeof(int32_t));
@@ -6799,9 +6502,8 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
                             free(sizes);
                             return throw(thread, "java.lang.NegativeArraySizeException", ERR_AT, pc);
                         }
-                        freeOperand(cnt);
-
                         sizes[off] = cnt->val.vint;
+                        freeOperand(cnt);
                     }
 
                     Object *arr = newMultiArray(thread, TYPE_OREF, sizes, dim, class);
@@ -6816,9 +6518,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0xc6: /* ifnull */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ifnull\n" ANSI_RESET);
-#endif
+                    dbg_cprintf(ANSI_INSTR " ifnull\n" ANSI_RESET);
                     //int16_t bra = (int16_t)(256U * code[pc+1] + code[pc+2]); pc += 2;
                     //bra = (int16_t)(bra - 3);
                     const int16_t bra = readBranch(code, &pc, 3);
@@ -6832,9 +6532,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
 
             case 0xc7: /* ifnonnull */
                 {
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " ifnonnull\n" ANSI_RESET);
-#endif
+                    dbg_cprintf(ANSI_INSTR " ifnonnull\n" ANSI_RESET);
                     const int16_t bra = readBranch(code, &pc, 3);
                     Operand *one = pop(cur_frame);
                     if (one == NULL) return throw(thread, "java.lang.VirtualMachineError", ERR_AT, pc);
@@ -6847,9 +6545,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
             case 0xc8: /* goto_w */
                 {
                     int32_t bra = readBranchWide(code, &pc, 5);
-#ifdef DEBUG_CODE
-                    printf(ANSI_INSTR " goto " ANSI_RESET " %d:%lu\n", bra, pc + bra);
-#endif
+                    dbg_cprintf(ANSI_INSTR " goto " ANSI_RESET " %d:%lu\n", bra, pc + bra);
                     pc += bra;
                 }
                 break;
@@ -6867,7 +6563,7 @@ static Operand *runCode(Thread *thread, Code_attribute *attr, const int32_t pc_m
     return NULL;
 }
 
-#ifdef DEBUG_CODE
+#ifdef DEBUG
 void dumpFrame(const Frame *f)
 {
     if (!f) {
@@ -6887,6 +6583,25 @@ void dumpFrame(const Frame *f)
                 printf("   [%d]: %s [%s]\n", i,
                         printOpType(f->local[i]->type),
                         printOpValue(f->local[i]));
+                if (f->local[i]->type == TYPE_OREF && !strcmp("java.lang.String",
+                            f->local[i]->val.vref->class->this_class->class.name->utf8.ascii)) {
+                    printf("   [String] = ");
+                    Object *strObj = f->local[i]->val.vref;
+                    const Field *fld = findFieldByName(strObj, "string");
+                    if (fld) {
+                        const Object *charObj = fld->op->val.vref;
+                        if (charObj) {
+                            for (ssize_t i = 0; i < charObj->array.len; i++)
+                            {
+                                if (charObj->array.data[i])
+                                    printf("%c", charObj->array.data[i]->val.vchar);
+                                else
+                                    printf("<NULL>");
+                            }
+                        }
+                    }
+                    printf("\n");
+                }
                 if (f->local[i]->type == TYPE_LONG ||
                         f->local[i]->type == TYPE_DOUBLE)
                     printf("   [%d]: --\n", i++);
@@ -6910,7 +6625,8 @@ void dumpFrame(const Frame *f)
 }
 #endif
 
-static Operand *invokeMethod(Thread *thread, const method_info *meth, bool withObject, int64_t old_pc)
+__attribute__((nonnull))
+static Operand *invokeMethod(Thread *thread, method_info *meth, bool withObject, int64_t old_pc, invoke_t /*invoke*/)
 {
     Frame *oldframe = thread->frame_free ? thread->stack[thread->frame_free-1] : NULL;
     uint16_t num_operands, num_locals;
@@ -6918,72 +6634,82 @@ static Operand *invokeMethod(Thread *thread, const method_info *meth, bool withO
     Code_attribute *code = NULL;
     Operand *throwOp = NULL;
     Object *th_obj = NULL;
-	Frame *cur_frame = currentFrame(thread);
+    Frame *cur_frame = currentFrame(thread);
 
-	assert(thread != NULL);
-	assert(meth != NULL);
+    assert(thread != NULL);
+    assert(meth != NULL);
 
-	if (withObject && (throwOp = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1])->type != TYPE_OREF) {
-		printf("(invokeMethod [%s] %s.%s%s ",
+    if (withObject) {
+        throwOp = cur_frame->stack[cur_frame->sp - meth->desc.num_params - 1];
+        if (throwOp->type != TYPE_OREF && throwOp->type != TYPE_AREF) {
+            printf("(invokeMethod [%s] %s.%s%s ",
+                    withObject ? "true": "false",
+                    getClassName(meth->class->this_class),
+                    meth->name->utf8.ascii,
+                    meth->descriptor->utf8.ascii
+                  );
+            printf("%s %s ", printOpType(throwOp->type), printOpValue(throwOp));
+            printf("%s:%u ", cur_frame->class->srcfile->utf8.ascii, getLine(cur_frame));
+            printf("\n");
+            abort();
+            return throw(thread, "java.lang.VirtualMachineError", NULL, thread->pc);
+        }
+        throwOp = NULL;
+    }
+
+
+    dbg_printf("(invokeMethod [%s] %s.%s%s %s:%u)\n",
             withObject ? "true": "false",
-            meth->class->this_class->d.class.name->d.utf8.ascii,
-            meth->name->d.utf8.ascii,
-            meth->descriptor->d.utf8.ascii
+            getClassName(meth->class->this_class),
+            meth->name->utf8.ascii,
+            meth->descriptor->utf8.ascii,
+            cur_frame->class ? cur_frame->class->srcfile->utf8.ascii : "<>",
+            getLine(cur_frame)
           );
-		printf("%s %s ", printOpType(throwOp->type), printOpValue(throwOp));
-		printf("\n");
-		abort();
-		return throw(thread, "java.lang.VirtualMachineError", NULL, thread->pc);
-	}
-
-
-#ifdef DEBUG_CODE
-    printf("(invokeMethod [%s] %s.%s%s)\n",
-            withObject ? "true": "false",
-            meth->class->this_class->d.class.name->d.utf8.ascii,
-            meth->name->d.utf8.ascii,
-            meth->descriptor->d.utf8.ascii
-          );
-#endif
 
     /* extract required Frame parameters for native/non-native methods */
     if ((meth->access_flags & (ACC_NATIVE|ACC_STATIC)) == (ACC_NATIVE|ACC_STATIC)) {
         if (!meth->nativeMethod.mstatic)
         {
             errx(EXIT_FAILURE, "Missing static native method in %s %s %s",
-                    meth->class->this_class->d.class.name->d.utf8.ascii,
-                    meth->name->d.utf8.ascii,
-                    meth->descriptor->d.utf8.ascii);
+                    getClassName(meth->class->this_class),
+                    meth->name->utf8.ascii,
+                    meth->descriptor->utf8.ascii);
         }
         num_operands = (uint16_t)(meth->desc.num_params + 13U); // FIXME this should be a max(return#, params#)
         num_locals = (uint16_t)(meth->desc.num_params * 2U);
     } else if (meth->access_flags & ACC_NATIVE) {
         if (!meth->nativeMethod.mvirtual)
             errx(EXIT_FAILURE, "Missing virtual native method in %s %s %s",
-                    meth->class->this_class->d.class.name->d.utf8.ascii,
-                    meth->name->d.utf8.ascii,
-                    meth->descriptor->d.utf8.ascii);
+                    getClassName(meth->class->this_class),
+                    meth->name->utf8.ascii,
+                    meth->descriptor->utf8.ascii);
         num_operands = (uint16_t)(meth->desc.num_params + 13U); // FIXME this should be a max(return#, params#)
         num_locals = (uint16_t)(meth->desc.num_params * 2U);
     } else {
-        const attribute_info *const ai = findAttribute(meth->attributes, meth->attributes_count, "Code");
+        if (meth->code_attr == NULL) {
+            meth->code_attr = findAttribute(meth->attributes, meth->attributes_count, "Code");
+        }
+        attribute_info *ai = meth->code_attr;//findAttribute(meth->attributes, meth->attributes_count, "Code");
         if (!ai) {
             char buf[BUFSIZ];
             printAccessFlags(meth->access_flags, buf, sizeof(buf));
             warnx("Missing code attribute for method (%s %s %s [%s])",
-                meth->class->this_class->d.class.name->d.utf8.ascii,
-                meth->name->d.utf8.ascii,
-                meth->descriptor->d.utf8.ascii,
+                getClassName(meth->class->this_class),
+                meth->name->utf8.ascii,
+                meth->descriptor->utf8.ascii,
                 buf);
-            exit(1);
+#ifdef DEBUG
+#endif
+            abort();
             return throw(thread, "java.lang.VirtualMachineError", ERR_AT, old_pc);
         }
 
         if ((code = ai->d.code) == NULL)
             errx(EXIT_FAILURE, "Missing code for method (%s %s %s)",
-                    meth->class->this_class->d.class.name->d.utf8.ascii,
-                    meth->name->d.utf8.ascii,
-                    meth->descriptor->d.utf8.ascii);
+                    getClassName(meth->class->this_class),
+                    meth->name->utf8.ascii,
+                    meth->descriptor->utf8.ascii);
 
         /* this is +x to handle situations such as createClass() */
         num_operands = (uint16_t)(code->max_stack + 3U);
@@ -7000,7 +6726,7 @@ static Operand *invokeMethod(Thread *thread, const method_info *meth, bool withO
         errx(EXIT_FAILURE, "invokeMethod: thread stack is full");
 
     thread->stack[thread->frame_free++] = newframe;
-    const method_info *old_meth = thread->cur_method;
+    method_info *old_meth = thread->cur_method;
     thread->cur_method = meth;
     newframe->mi = meth;
     newframe->class = meth->class;
@@ -7025,7 +6751,6 @@ static Operand *invokeMethod(Thread *thread, const method_info *meth, bool withO
             warnx("invokeMethod: expected %d got %d: " ERR_AT,
                     meth->desc.num_params,
                     oldframe->sp);
-            __asm__("int $3");
         }
         for (int i = 0; i < meth->desc.num_params; i++) {
             Operand *tmp = pop(oldframe);
@@ -7041,19 +6766,13 @@ static Operand *invokeMethod(Thread *thread, const method_info *meth, bool withO
 
 
     /* invoke the method */
-#ifdef DEBUG_CODE
-    printf("(invoking method %s %s)\n", meth->name->d.utf8.ascii,
-            meth->descriptor->d.utf8.ascii);
-#endif
+    dbg_printf("(invoking method %s %s)\n", meth->name->utf8.ascii,
+            meth->descriptor->utf8.ascii);
     if ((meth->access_flags & (ACC_NATIVE|ACC_STATIC)) == (ACC_NATIVE|ACC_STATIC)) {
-#ifdef DEBUG_CODE
-        printf(" (native+static %s)\n", meth->name->d.utf8.ascii);
-#endif
+        dbg_printf(" (native+static %s)\n", meth->name->utf8.ascii);
         throwOp = meth->nativeMethod.mstatic(thread, meth->class);
     } else if (meth->access_flags & ACC_NATIVE) {
-#ifdef DEBUG_CODE
-        printf(" (native %s)\n", meth->name->d.utf8.ascii);
-#endif
+        dbg_printf(" (native %s)\n", meth->name->utf8.ascii);
         if (!withObject)
             errx(EXIT_FAILURE, "invokeMethod: mvirtual but no withObject");
         if (!newframe->local || !newframe->local[0])
@@ -7063,26 +6782,25 @@ static Operand *invokeMethod(Thread *thread, const method_info *meth, bool withO
         throwOp = meth->nativeMethod.mvirtual(thread, meth->class,
                 newframe->local[0]->val.vref);
     } else {
-#ifdef DEBUG_CODE
-        printf(" (normal)\n");
-#endif
+        dbg_printf(" (normal %s:%u) ",
+                newframe->class ? newframe->class->srcfile->utf8.ascii : "<>",
+                getLine(newframe));
+        if (withObject) {
+            dbg_printf("(withObject %s)", printObject(newframe->local[0]->val.vref));
+        }
+        dbg_printf("\n");
         throwOp = runCode(thread, code, 0, &pc);
     }
 
 redo:
-#ifdef DEBUG_CODE
-    //dumpFrame(newframe);
-    printf(ANSI_BRED "(done method %s %s%s)"ANSI_RESET"\n",
-            meth->name->d.utf8.ascii,
-            meth->descriptor->d.utf8.ascii,
+    dbg_printf(ANSI_BRED "(done method %s %s%s)"ANSI_RESET"\n",
+            meth->name->utf8.ascii,
+            meth->descriptor->utf8.ascii,
             throwOp ? " [throw Object]" : "");
-#endif
 
     if (throwOp) {
         th_obj = throwOp->val.vref;
-#ifdef DEBUG_CODE
-        printf("(method threw - %s %s)\n", printObject(th_obj), th_obj->class->this_class->d.class.name->d.utf8.ascii);
-#endif
+        dbg_printf("(method threw - %s %s)\n", printObject(th_obj), getClassName(th_obj->class->this_class));
 
         if (meth->code && meth->code->exception_table_length) {
             for (int i = 0; i < meth->code->exception_table_length; i++)
@@ -7092,13 +6810,10 @@ redo:
                 if(pc < ex->start_pc ||
                         pc > ex->end_pc ||
                         (ex->catch_type != NULL &&
-                         strcmp(th_obj->class->this_class->d.class.name->d.utf8.ascii,
-                             ex->catch_type->d.class.name->d.utf8.ascii)))
+                         strcmp(getClassName(th_obj->class->this_class), getClassName(ex->catch_type))))
                     continue;
 
-#ifdef DEBUG_CODE
-                printf("(handler match)\n");
-#endif
+                dbg_printf("(handler match)\n");
                 while(newframe->sp) freeOperand(pop(newframe));
                 push(newframe, newOperand(TYPE_OREF, th_obj));
                 freeAndNullOperand(&throwOp); /* otherwise the old throw is never free'd */
@@ -7117,12 +6832,10 @@ redo:
         default:
             {
                 if (newframe->ret) {
-#ifdef DEBUG_CODE
-                    printf("(pushing return %s %s)\n",
+                    dbg_printf("(pushing return %s %s)\n",
                             printOpType(newframe->ret->type),
                             printOpValue(newframe->ret)
                           );
-#endif
                     push(oldframe, dupOperand(newframe->ret));
                     freeAndNullOperand(&newframe->ret);
                 } else push(oldframe, newOperand(TYPE_NULL, NULL));
@@ -7130,7 +6843,6 @@ redo:
             break;
     } else if (newframe->ret) {
         warnx("newframe: ret is set?");
-        __asm__("int $3");
     }
 
     /* pop off and free the new frame */
@@ -7140,38 +6852,33 @@ redo:
 
     freeFrame(newframe);
 
-#ifdef DEBUG_CODE
     if (old_meth) {
-        printf(ANSI_BMAG "(back to %s.%s %s)\n" ANSI_RESET,
-                old_meth->class->this_class->d.class.name->d.utf8.ascii,
-                old_meth->name->d.utf8.ascii,
-                old_meth->descriptor->d.utf8.ascii);
-    } else
-        printf(ANSI_BYEL "(no parent method)\n" ANSI_RESET);
-#endif
+        dbg_printf(ANSI_BMAG "(back to %s.%s %s)\n" ANSI_RESET,
+                getClassName(old_meth->class->this_class),
+                old_meth->name->utf8.ascii,
+                old_meth->descriptor->utf8.ascii);
+    } else {
+        dbg_printf(ANSI_BYEL "(no parent method)\n" ANSI_RESET);
+    }
 
     if (th_obj) {
-#ifdef DEBUG_CODE
-        printf("(returning with thrown object %s)\n", printObject(th_obj));
-#endif
+        dbg_printf("(returning with thrown object %s)\n", printObject(th_obj));
         return newOperand(TYPE_OREF, th_obj);
     } else
         return NULL;
 }
 
-static bool addClass(Thread *thread, ClassFile *cf)
+static bool addClass(Thread *thread, ClassFile *cf, Object * /*classLoader*/)
 {
-#ifdef DEBUG
-    printf("(addClass: %s)\n", cf->this_class->d.class.name->d.utf8.ascii);
-#endif
+    dbg_printf("(addClass: %s)\n", getClassName(cf->this_class));
 
-    if (cf == NULL)
-        errx(EXIT_FAILURE, "addClass: Attempting to add NULL class");
+    assert(cf != NULL);
 
     uint16_t ptr = 0;
 
-    if (isClassLoaded(thread, cf->this_class->d.class.name->d.utf8.ascii)) {
-        warnx("addClass: %s [exists]", cf->this_class->d.class.name->d.utf8.ascii);
+    if (isClassLoaded(thread, getClassName(cf->this_class))) {
+        warnx("addClass: %s [exists]", getClassName(cf->this_class));
+        abort();
         return false;
     }
 
@@ -7191,13 +6898,14 @@ static bool addClass(Thread *thread, ClassFile *cf)
     if (pthread_rwlock_unlock(&jvm->rwlock))
         errx(EXIT_FAILURE, "addClass: pthread_rwlock_unlock");
 
-    //printf(ANSI_BYEL "addClass: %s\n" ANSI_RESET, cf->this_class->d.class.name->d.utf8.ascii);
+    //printf(ANSI_BYEL "addClass: %s\n" ANSI_RESET, getClassName(cf->this_class));
 
     return true;
 }
 
 static long totalOperands = 0;
 
+__attribute__((malloc(freeOperand,1),nonnull))
 static Operand *dupOperand(const Operand *old)
 {
     assert(old != NULL);
@@ -7217,15 +6925,12 @@ static Operand *dupOperand(const Operand *old)
     }
 
     totalOperands++;
-#ifdef DEBUG
-//  printf("dupOperand: @%p %s %s -> @%p %s %s\n",
-//          (void *)old, printOpType(old->type), printOpValue(old),
-//          (void *)new, printOpType(new->type), printOpValue(new));
-#endif
+    //dbg_printf("dupOperand: @%p -> @%p %s %s\n", (void *)old, (void *)new, printOpType(new->type), printOpValue(new));
     return new;
 }
 
 
+__attribute__((malloc(freeOperand,1)))
 static Operand *newOperand(uint8_t type, const void *value)
 {
     Operand * ret = calloc(1, sizeof(Operand)); // making this malloc causes SEGV?? FIXME
@@ -7248,13 +6953,26 @@ static Operand *newOperand(uint8_t type, const void *value)
             case TYPE_SHORT:    ret->val.vshort = *(int16_t *)value;    break;
             case TYPE_BOOL:     ret->val.vbool = *(bool *)value;        break;
 
+            case TYPE_NULL:     ret->val.vint = *(int32_t *)value;      break; /* KLUDGE */
+
             case TYPE_OREF:
             case TYPE_AREF:
-                                ret->val.vref = (Object *)value;
-                                ret->val.vref->lock++; // lock-- in freeOperand
+                                {
+                                    switch(((Object *)value)->type) {
+                                        case OBJ_CLASS:
+                                        case OBJ_ARRAY:
+                                            break;
+                                        default:
+                                            warnx("newOperand: attempt to create OREF or AREF to non Object!");
+                                            abort();
+                                            break;
+                                    }
+                                    ret->val.vref = (Object *)value;
+                                    ret->val.vref->lock++; // lock-- in freeOperand
+                                }
                                 break;
             default:
-                                warnx("newOperand: no idea how to create type: %x", type);
+                                warnx("newOperand: no idea how to create type: %x with a value", type);
                                 abort();
                                 break;
         }
@@ -7272,13 +6990,12 @@ static Operand *newOperand(uint8_t type, const void *value)
 
     totalOperands++;
 
-#ifdef DEBUG
-//  printf("newOperand: @%p %s %s\n", (void *)ret, printOpType(ret->type), printOpValue(ret));
-#endif
+    //dbg_printf("newOperand: @%p %s %s\n", (void *)ret, printOpType(ret->type), printOpValue(ret));
 
     return ret;
 }
 
+__attribute__((nonnull))
 static uint32_t freeAndNullOperand(Operand **o)
 {
     uint32_t ret = 9999;
@@ -7292,46 +7009,44 @@ static uint32_t freeAndNullOperand(Operand **o)
     return ret;
 }
 
+__attribute__((nonnull))
 static uint32_t freeOperand(Operand *o)
 {
     uint32_t ret = 99999;
 
     assert(o != NULL);
+    assert(o->freed == 0);
 
-    if (o) {
-#ifdef DEBUG
-//      printf("freeOperand: @%p %s %s\n", (void *)o, printOpType(o->type), printOpValue(o));
-#endif
-        assert(o->freed == 0);
-        switch(o->type)
-        {
-            case TYPE_AREF:
-            case TYPE_OREF:
-                if (o->val.vref) {
-                    if (o->val.vref->lock == 0)
-                        warnx("freeOperand: attempting to free an unlocked Object");
-                    else
-                        ret = --o->val.vref->lock;
-                    o->val.vref = NULL;
-
+    switch(o->type)
+    {
+        case TYPE_AREF:
+        case TYPE_OREF:
+            if (o->val.vref) {
+                if (o->val.vref->lock == 0) {
+                    warnx("freeOperand: attempting to free an unlocked Object. Operand @ %p", (void *)o);
+                    //dbg_printf("freeOperand: %s:%s\n", printOpType(o->type), printOpValue(o));
                 } else
-                    ret = 999999;
-                /* FALLTHRU */
-            default:
-                o->type = TYPE_NULL;
-                o->freed = 1;
-                free(o);
-                totalOperands--;
-                break;
-        }
-    }
+                    ret = --o->val.vref->lock;
+                o->val.vref = NULL;
 
+            } else
+                ret = 999999;
+            /* FALLTHRU */
+        default:
+            o->type = TYPE_NULL;
+            memset(o, 0, sizeof(Operand));
+            o->freed = 1;
+            free(o);
+            totalOperands--;
+            break;
+    }
 
     return ret;
 }
 
-static Operand *filedescriptor_sysClose(Thread *thread, ClassFile *cls,
-        Object *this)
+__attribute__((nonnull))
+static Operand *filedescriptor_sysClose(Thread *thread, ClassFile * /*cls*/,
+        Object * /*this*/)
 {
     Frame *cur_frame = currentFrame(thread);
     int ret,fd;
@@ -7342,25 +7057,27 @@ static Operand *filedescriptor_sysClose(Thread *thread, ClassFile *cls,
     return NULL;
 }
 
-static Operand *file_access(Thread *thread, ClassFile *cls, Object *this)
+__attribute__((nonnull))
+static Operand *file_access(Thread *thread, ClassFile * /*cls*/, Object *this)
 {
     const Field *fld = NULL;
-    if ((fld = findFieldByName(this, "pathname")) == NULL)
+    const Object *pathname_str;
+    const Object *pathname_ch;
+
+    if (!getObjectFieldValue(this, "pathname", &pathname_str) || pathname_str == NULL)
         return throw(thread, "java.lang.VirtualMachineError", NULL, thread->pc);
 
-    const Object *pathname_str = fld->op->val.vref;
-    if ((fld = findFieldByName(pathname_str, "string")) == NULL)
+    if (!getObjectFieldValue(pathname_str, "string", &pathname_ch) || pathname_ch == NULL)
         return throw(thread, "java.lang.RuntimeException", NULL, thread->pc);
 
-    const Object *pathname_ch = fld->op->val.vref;
     uint16_t *chars = NULL;
-    uint32_t len = pathname_ch->data.array.len;
+    uint32_t len = pathname_ch->array.len;
 
     if ((chars = calloc(len, sizeof(uint16_t))) == NULL)
         return throw(thread, "java.lang.RuntimeException", NULL, thread->pc);
 
-    for (ssize_t i = 0; i < pathname_ch->data.array.len; i++)
-        chars[i] = pathname_ch->data.array.data[i]->val.vchar;
+    for (ssize_t i = 0; i < pathname_ch->array.len; i++)
+        chars[i] = pathname_ch->array.data[i]->val.vchar;
 
     char *ascii = parseUtf16ToAscii(chars, len);
     free(chars);
@@ -7379,7 +7096,8 @@ static Operand *file_access(Thread *thread, ClassFile *cls, Object *this)
     return NULL;
 }
 
-static Operand *file_stat(Thread *thread, ClassFile *cls, Object *this)
+__attribute__((nonnull))
+static Operand *file_stat(Thread *thread, ClassFile * /*cls*/, Object *this)
 {
     const Field *fld = NULL;
     if ((fld = findFieldByName(this, "pathname")) == NULL)
@@ -7391,13 +7109,13 @@ static Operand *file_stat(Thread *thread, ClassFile *cls, Object *this)
 
     const Object *pathname_ch = fld->op->val.vref;
     uint16_t *chars = NULL;
-    uint32_t len = pathname_ch->data.array.len;
+    uint32_t len = pathname_ch->array.len;
 
     if ((chars = calloc(len, sizeof(uint16_t))) == NULL)
         return throw(thread, "java.lang.RuntimeException", NULL, thread->pc);
 
-    for (ssize_t i = 0; i < pathname_ch->data.array.len; i++)
-        chars[i] = pathname_ch->data.array.data[i]->val.vchar;
+    for (ssize_t i = 0; i < pathname_ch->array.len; i++)
+        chars[i] = pathname_ch->array.data[i]->val.vchar;
 
     char *ascii = parseUtf16ToAscii(chars, len);
     free(chars);
@@ -7430,8 +7148,9 @@ static Operand *file_stat(Thread *thread, ClassFile *cls, Object *this)
     return NULL;
 }
 
-static Operand *filedescriptor_sysOpen(Thread *thread, ClassFile *cls,
-        Object *this)
+__attribute__((nonnull))
+static Operand *filedescriptor_sysOpen(Thread *thread, ClassFile * /*cls*/,
+        Object * /*this*/)
 {
     Frame *cur_frame = currentFrame(thread);
     int ret;
@@ -7449,13 +7168,13 @@ static Operand *filedescriptor_sysOpen(Thread *thread, ClassFile *cls,
     const Object *name = fld->op->val.vref;
 
     uint16_t *chars = NULL;
-    uint32_t len = name->data.array.len;
+    uint32_t len = name->array.len;
 
     if ((chars = calloc(len, sizeof(uint16_t))) == NULL)
         return throw(thread, "java.lang.RuntimeException", NULL, thread->pc);
 
-    for (ssize_t i = 0; i < name->data.array.len; i++)
-        chars[i] = name->data.array.data[i]->val.vchar;
+    for (ssize_t i = 0; i < name->array.len; i++)
+        chars[i] = name->array.data[i]->val.vchar;
 
     char *ascii = parseUtf16ToAscii(chars, len);
     free(chars);
@@ -7475,7 +7194,8 @@ static Operand *filedescriptor_sysOpen(Thread *thread, ClassFile *cls,
     return NULL;
 }
 
-static Operand *fileinputstream_readint(Thread *thread, ClassFile *cls,
+__attribute__((nonnull))
+static Operand *fileinputstream_readint(Thread *thread, ClassFile * /*cls*/,
         Object *this)
 {
     Frame *cur_frame = currentFrame(thread);
@@ -7514,12 +7234,13 @@ static Operand *fileinputstream_readint(Thread *thread, ClassFile *cls,
     return NULL;
 }
 
-static Operand *fileoutputstream_writeb(Thread *thread, ClassFile *cls,
+__attribute__((nonnull))
+static Operand *fileoutputstream_writeb(Thread *thread, ClassFile * /*cls*/,
         Object *this)
 {
     const Frame *cur_frame = currentFrame(thread);
     assert(cur_frame != NULL);
-    
+
     const Field *fld = findFieldByName(this, "fdObj");
     if (fld == NULL) {
         warnx("fileoutputstream_writeb: can't find fdObj");
@@ -7543,7 +7264,8 @@ static Operand *fileoutputstream_writeb(Thread *thread, ClassFile *cls,
     return NULL;
 }
 
-static Operand *fileoutputstream_writebarray(Thread *thread, ClassFile *cls,
+__attribute__((nonnull))
+static Operand *fileoutputstream_writebarray(Thread *thread, ClassFile * /*cls*/,
         Object *this)
 {
     Frame *cur_frame = currentFrame(thread);
@@ -7571,19 +7293,18 @@ static Operand *fileoutputstream_writebarray(Thread *thread, ClassFile *cls,
     }
 
     array = cur_frame->local[1]->val.vref;
-    if (array->data.array.len == 0) {
-        warnx("fileoutputstream_writebarray: trying to write 0 length array");
+    if (array == NULL || array->array.len == 0) {
         return NULL;
     }
 
-    if ((buf = malloc(array->data.array.len)) == NULL) {
+    if ((buf = malloc(array->array.len)) == NULL) {
         warn("malloc");
         goto fail;
     }
 
-    for (uint32_t i = 0; i < array->data.array.len; i++)
+    for (uint32_t i = 0; i < array->array.len; i++)
     {
-        Operand *op = array->data.array.data[i];
+        Operand *op = array->array.data[i];
         if (!op)
             buf[i] = 0;
         else {
@@ -7591,13 +7312,13 @@ static Operand *fileoutputstream_writebarray(Thread *thread, ClassFile *cls,
                 warnx("fileoutputstream_writebarray: not TYPE_BYTE or NULL: %d [%d/%d]",
                         op ? op->type : -1,
                         i,
-                        array->data.array.len);
+                        array->array.len);
                 goto fail;
             }
             buf[i] = op->val.vbyte;
         }
     }
-    if (write(fd, buf, array->data.array.len) == -1) {
+    if (write(fd, buf, array->array.len) == -1) {
         warn("fileoutputstream_writebarray");
         goto fail;
     }
@@ -7613,86 +7334,157 @@ fail:
 /* NIO native structures */
 
 struct nio_filechannel_native {
-	int fd;
+    int fd;
 };
 
-static Operand *nio_filechannel_init(Thread *thread, Object *this)
+__attribute__((nonnull))
+static Operand *nio_filechannel_init(Thread *thread, ClassFile * /*cls*/, Object *this)
 {
-	Frame *cur_frame;
-	struct nio_filechannel_native *native;
-	const Field *fld;
-	Object *fdObj = NULL;
-	int fd = -1;
-	Operand *ret;
+    Frame *cur_frame;
+    struct nio_filechannel_native *native;
+    const Field *fld;
+    Object *fdObj = NULL;
+    int fd = -1;
+    Operand *ret = NULL;
 
-	cur_frame = currentFrame(thread);
-	assert(cur_frame != NULL);
+    if ((cur_frame = currentFrame(thread)) == NULL) {
+        warnx("nio_filechannel_init: NULL currentFrame!");
+        goto fail;
+    }
 
-	fld = findFieldByName(this, "fdObj");
-	assert(fld != NULL && fld->op != NULL);
-	if (fld->op->type == TYPE_NULL)
-		goto fail;
+    warnx("nio_filechannel_init: %s", getClassName(this->class->this_class));
 
-	fdObj = fld->op->val.vref;
-	fld = findFieldByName(this, "fd");
-	assert(fld != NULL && fld->op != NULL);
+    fld = findFieldByName(this, "fdObj");
+    if(fld == NULL || fld->op == NULL) {
+        warnx("nio_filechannel_init: fdObj not present");
+        goto fail;
+    }
+    if (fld->op->type == TYPE_NULL)
+        goto fail;
 
-	fd = fld->op->val.vint;
-	if (fd == -1)
-		goto fail;
+    fdObj = fld->op->val.vref;
+    if (fdObj == NULL) {
+        warnx("nio_filechannel_init: fdObj is NULL");
+        goto fail;
+    }
 
-	if ((native = this->data.obj.native_data = calloc(1, sizeof(struct nio_filechannel_native))) == NULL) {
-		warn("nio_filechannel_init: native_data: calloc");
-		goto fail;
-	}
+    fld = findFieldByName(fdObj, "fd");
+    if(fld == NULL || fld->op == NULL) {
+        warnx("nio_filechannel_init: fd is NULL");
+        goto fail;
+    }
 
-	this->data.obj.native_free = free;
+    fd = fld->op->val.vint;
+    if (fd == -1)
+        goto fail;
 
-	const method_info *mi_put;
-	mi_put = findMethodByClass(thread, this->class, "put", "([B)Ljava.nio.ByteBuffer;");
+    if ((native = this->obj.native_data = calloc(1,
+                    sizeof(struct nio_filechannel_native))) == NULL) {
+        warn("nio_filechannel_init: native_data: calloc");
+        goto fail;
+    }
 
-	const method_info *mi_remaining;
-	mi_remaining = findMethodByClass(thread, this->class, "remaining", "(V)I");
+    native->fd = fd;
+    this->obj.native_free = free;
 
-	push(cur_frame, newOperand(TYPE_OREF, this));
-	ret = invokeMethod(thread, mi_remaining, true, thread->pc);
+    /* FIXME not sure if this is needed or not ?
+    const method_info *mi_put;
+    mi_put = findMethodByClass(thread, this->class, "put", "([B)Ljava.nio.ByteBuffer;");
+    assert(mi_put != NULL);
 
-	if (ret->type != TYPE_INT)
-		goto fail;
+    method_info *mi_remaining;
+    mi_remaining = findMethodByClass(thread, this->class, "remaining", "(V)I");
+    assert(mi_remaining != NULL);
 
-	/* in java we would do:
-	 *
-	 * int fd = fdObj.fd;
-	 * byte[] tmp = new byte[remaining()];
-	 * int rd = read(fd, tmp, tmp.length); // read(2)
-	 * if (rd == -1) return -1;
-	 * if (rd == 0)  return 0;
-	 * put(rd == tmp.length ? tmp : Arrays.copyOf(tmp, rd));
-	 *
-	 */
+    push(cur_frame, newOperand(TYPE_OREF, this));
+    ret = invokeMethod(thread, mi_remaining, true, thread->pc);
 
-	/* read the stuff into something? */
-	/* invoke put ? */
-	/* maybe if the ByteBuffer is 'direct' then cheat ? */
+    if (ret->type != TYPE_INT)
+        goto fail;
+    */
 
-	return ret;
+    /* in java we would do:
+     *
+     * int fd = fdObj.fd;
+     * byte[] tmp = new byte[remaining()];
+     * int rd = read(fd, tmp, tmp.length); // read(2)
+     * if (rd == -1) return -1;
+     * if (rd == 0)  return 0;
+     * put(rd == tmp.length ? tmp : Arrays.copyOf(tmp, rd));
+     *
+     */
+
+    /* read the stuff into something? */
+    /* invoke put ? */
+    /* maybe if the ByteBuffer is 'direct' then cheat ? */
+
+    return ret;
 fail:
-	if (ret)
-		freeAndNullOperand(&ret);
-	return throw(thread, "java.io.IOException", ERR_AT, thread->pc);
+    if (ret)
+        freeAndNullOperand(&ret);
+    return throw(thread, "java.io.IOException", ERR_AT, thread->pc);
 }
 
+__attribute__((nonnull, unused))
 static Operand *nio_implfilechannel_read(Thread *thread, ClassFile *cls,
-		Object *this)
+        Object *this)
 {
-	Operand *ret = NULL;
+    Operand *ret = NULL;
 
-	if (!this->data.obj.native_data)
-		if ((ret = nio_filechannel_init(thread, this)) != NULL)
-			return ret;
+    if (!this->obj.native_data)
+        if ((ret = nio_filechannel_init(thread, cls, this)) != NULL)
+            return ret;
+
+    return ret;
 }
 
-static Object *getClassObject(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *niochannels_implfilechannel_nativewrite(Thread *thread, ClassFile *cls,
+        Object *this)
+{
+    Frame *cur_frame = currentFrame(thread);
+    Operand *ret = NULL;
+    //int len = 0;
+
+#ifdef DEBUG_CODE
+    dumpFrame(cur_frame);
+#endif
+
+    //warnx("niochannels_implfilechannel_nativewrite");
+
+    if (!this->obj.native_data)
+        if ((ret = nio_filechannel_init(thread, cls, this)) != NULL)
+            return ret;
+
+
+    const Field *fld = findFieldByName(this, "fdObj");
+    if (fld == NULL) {
+        warnx("niochannels_implfilechannel_nativewrite: can't find fdObj");
+        return throw(thread, "java.lang.VirtualMachineError", ERR_AT, thread->pc);
+    }
+
+    const Object *fdObj = fld->op->val.vref;
+    if (fdObj == NULL) {
+        warnx("niochannels_implfilechannel_nativewrite: fdObj is NULL");
+        return throw(thread, "java.lang.IOException", ERR_AT, thread->pc);
+    }
+
+    fld = findFieldByName(fdObj, "fd");
+    const int fd = fld->op->val.vint;
+
+    uint8_t a;
+    int ret_val;
+
+    a = getLocal(cur_frame, 1)->val.vbyte;
+    ret_val = write(fd, &a, 1);
+
+    cur_frame->ret = newOperand(TYPE_INT, &ret_val);
+
+    return NULL;
+}
+
+__attribute__((nonnull))
+static Object *getClassObject(Thread *thread, ClassFile *cls, bool lock)
 {
     int rc;
     char buf[BUFSIZ];
@@ -7700,21 +7492,25 @@ static Object *getClassObject(Thread *thread, ClassFile *cls)
 
     if (cls->class_object) return cls->class_object;
 
-    if ((rc = pthread_rwlock_wrlock(&cls->rwlock)) != 0) {
-        strerror_r(rc, buf, sizeof(buf));
-        return NULL;
-    }
+    if (lock)
+        if ((rc = pthread_rwlock_wrlock(&cls->rwlock)) != 0) {
+            strerror_r(rc, buf, sizeof(buf));
+            warnx("getClassObject: %s", buf);
+            return NULL;
+        }
 
     if ((ret = cls->class_object)) goto done;
 
-    ret = cls->class_object = createClass(thread, cls);
+    ret = cls->class_object = createClass(thread, cls, NULL);
 
 done:
-    pthread_rwlock_unlock(&cls->rwlock);
+    if (lock)
+        pthread_rwlock_unlock(&cls->rwlock);
     return ret;
 }
 
-static Operand *javalangmath_sin(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_sin(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7726,7 +7522,8 @@ static Operand *javalangmath_sin(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_sinh(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_sinh(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7738,7 +7535,8 @@ static Operand *javalangmath_sinh(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_cos(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_cos(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7750,7 +7548,8 @@ static Operand *javalangmath_cos(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_cosh(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_cosh(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7762,7 +7561,8 @@ static Operand *javalangmath_cosh(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_sqrt(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_sqrt(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7774,7 +7574,8 @@ static Operand *javalangmath_sqrt(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_atan2(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_atan2(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *b = cur_frame->local[1];
@@ -7787,7 +7588,8 @@ static Operand *javalangmath_atan2(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_atan(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_atan(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7799,7 +7601,8 @@ static Operand *javalangmath_atan(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_acos(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_acos(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7811,7 +7614,8 @@ static Operand *javalangmath_acos(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_asin(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_asin(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7823,7 +7627,8 @@ static Operand *javalangmath_asin(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_log(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_log(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7835,7 +7640,8 @@ static Operand *javalangmath_log(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_log10(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_log10(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7847,7 +7653,8 @@ static Operand *javalangmath_log10(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-static Operand *javalangmath_log1p(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_log1p(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     const Operand *a = cur_frame->local[0];
@@ -7859,8 +7666,8 @@ static Operand *javalangmath_log1p(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
-
-static Operand *javalangmath_exp(Thread *thread, ClassFile *cls)
+__attribute__((nonnull))
+static Operand *javalangmath_exp(Thread *thread, ClassFile * /*cls*/)
 {
     Frame *cur_frame = currentFrame(thread);
     Operand *a = cur_frame->local[0];
@@ -7872,6 +7679,7 @@ static Operand *javalangmath_exp(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangmath_hypot(Thread *thread, ClassFile *cls)
 {
     Frame *cur_frame = currentFrame(thread);
@@ -7885,6 +7693,7 @@ static Operand *javalangmath_hypot(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangdouble_doubleToRawLongBits(Thread *thread,
         ClassFile *cls)
 {
@@ -7897,6 +7706,7 @@ static Operand *javalangdouble_doubleToRawLongBits(Thread *thread,
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangfloat_floatToRawIntBits(Thread *thread,
         ClassFile *cls)
 {
@@ -7909,6 +7719,7 @@ static Operand *javalangfloat_floatToRawIntBits(Thread *thread,
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangdouble_longBitsToDouble(Thread *thread,
         ClassFile *cls)
 {
@@ -7921,6 +7732,7 @@ static Operand *javalangdouble_longBitsToDouble(Thread *thread,
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangfloat_intBitsToFloat(Thread *thread,
         ClassFile *cls)
 {
@@ -7934,18 +7746,20 @@ static Operand *javalangfloat_intBitsToFloat(Thread *thread,
 }
 
 
+__attribute__((nonnull))
 static Operand *javalangobject_getClass(Thread *thread, ClassFile *cls,
         Object *this)
 {
     Frame *cur_frame = currentFrame(thread);
-    //printf("getClass: %s @ %p\n", this->class->this_class->d.class.name->d.utf8.ascii, this->class);
+    dbg_printf("getClass: %s @ %p\n", getClassName(this->class->this_class), this->class);
     cur_frame->ret = newOperand(TYPE_OREF, getClassObject(thread,
-                (ClassFile *)this->class));
-    //printf("getClass: ret: %p\n", cur_frame->ret->val.vref);
+                (ClassFile *)this->class, true));
+    dbg_printf("getClass: ret: %p\n", cur_frame->ret->val.vref);
 
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangobject_hashCode(Thread *thread, ClassFile *cls,
         Object *this)
 {
@@ -7955,6 +7769,7 @@ static Operand *javalangobject_hashCode(Thread *thread, ClassFile *cls,
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangthread_nativeStart(Thread *thread, ClassFile *cls,
         Object *this)
 {
@@ -7965,6 +7780,7 @@ static Operand *javalangthread_nativeStart(Thread *thread, ClassFile *cls,
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangthread_sleep(Thread *thread, ClassFile *cls)
 {
     Frame *cur_frame = currentFrame(thread);
@@ -7986,6 +7802,7 @@ static Operand *javalangthread_sleep(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangthread_currentThread(Thread *thread, ClassFile *cls)
 {
     Frame *cur_frame = currentFrame(thread);
@@ -7999,15 +7816,17 @@ static Operand *javalangthread_currentThread(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangreflectarray_newInstance(Thread *thread, ClassFile *cls)
 {
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangsystem_exit(Thread *thread, ClassFile *cls)
 {
     Frame *cur_frame = currentFrame(thread);
-    Operand *rc_op = pop(cur_frame);
+    Operand *rc_op = getLocal(cur_frame,0); //pop(cur_frame);
     if (rc_op) {
         const int rc = rc_op->val.vint;
         freeAndNullOperand(&rc_op);
@@ -8016,6 +7835,7 @@ static Operand *javalangsystem_exit(Thread *thread, ClassFile *cls)
         exit(EXIT_SUCCESS);
 }
 
+__attribute__((nonnull))
 static Operand *javalangsystem_currentTimeMillis(Thread *thread, ClassFile *cls)
 {
     Frame *cur_frame = currentFrame(thread);
@@ -8033,6 +7853,7 @@ static Operand *javalangsystem_currentTimeMillis(Thread *thread, ClassFile *cls)
     return NULL;
 }
 
+__attribute__((nonnull))
 static Operand *javalangclassloader_findClass(Thread *thread, ClassFile *cls, Object *this)
 {
     Frame *cur_frame = currentFrame(thread);
@@ -8047,26 +7868,28 @@ static Operand *javalangclassloader_findClass(Thread *thread, ClassFile *cls, Ob
     const Object *name = fld->op->val.vref;
     uint16_t *chars = NULL;
 
-    if ((chars = calloc(name->data.array.len, sizeof(uint16_t))) == NULL)
+    if ((chars = calloc(name->array.len, sizeof(uint16_t))) == NULL)
         return NULL;
 
-    for (ssize_t i = 0; i < name->data.array.len; i++)
-        chars[i] = name->data.array.data[i]->val.vchar;
+    for (ssize_t i = 0; i < name->array.len; i++)
+        chars[i] = name->array.data[i]->val.vchar;
 
-    char *ascii = parseUtf16ToAscii(chars, name->data.array.len);
+    char *ascii = parseUtf16ToAscii(chars, name->array.len);
     free(chars);
     chars = NULL;
 
-    for(size_t i = 0; i < strlen(ascii); i++)
+    const size_t len = strlen(ascii);
+
+    for(size_t i = 0; i < len; i++)
         if(ascii[i] == '.') ascii[i]='/';
 
-    const ClassFile *cf = findClass(thread, ascii);
+    const ClassFile *cf = findClass(thread, ascii, this);
     free(ascii);
     ascii = NULL;
 
     if (cf) {
         cur_frame->ret = newOperand(TYPE_OREF, getClassObject(thread,
-                    (ClassFile *)cf));
+                    (ClassFile *)cf, true));
     } else {
         cur_frame->ret = newOperand(TYPE_NULL, NULL);
     }
@@ -8074,11 +7897,47 @@ static Operand *javalangclassloader_findClass(Thread *thread, ClassFile *cls, Ob
     return NULL;
 }
 
-static Operand *javalangclassloader_findLoadedClass(Thread *thread,
-        ClassFile *cls, Object *this)
+__attribute__((nonnull))
+static bool getObjectFieldValue(const Object *obj, const char *name, void *out)
 {
-    Frame *cur_frame = currentFrame(thread);
+    const Field *fld;
+
+    if ((fld = findFieldByName(obj, name)) == NULL)
+        return false;
+
+    if (fld->op == NULL) {
+        /* TODO */
+        return false;
+    }
+
+    switch (fld->op->type)
+    {
+        case TYPE_BYTE:    *(int8_t  *)out = fld->op->val.vbyte;    break;
+        case TYPE_BOOL:    *(bool    *)out = fld->op->val.vbool;    break;
+        case TYPE_CHAR:    *(uint16_t*)out = fld->op->val.vchar;    break;
+        case TYPE_SHORT:   *(int16_t *)out = fld->op->val.vshort;   break;
+        case TYPE_RETADDR: *(uint32_t*)out = fld->op->val.vretaddr; break;
+        case TYPE_INT:     *(int32_t *)out = fld->op->val.vint;     break;
+        case TYPE_FLOAT:   *(float   *)out = fld->op->val.vfloat;   break;
+        case TYPE_DOUBLE:  *(double  *)out = fld->op->val.vdouble;  break;
+        case TYPE_LONG:    *(long    *)out = fld->op->val.vlong;    break;
+        case TYPE_OREF:
+        case TYPE_AREF:
+                           *(Object **)out = fld->op->val.vref;     break;
+        default:
+                           warnx("getObjectFieldValue: unsupported op->type");
+                           return false;
+                           break;
+    }
+    return true;
+}
+
+__attribute__((nonnull))
+static Operand *javalangclassloader_findLoadedClass(Thread *thread, ClassFile * /*cls*/, Object *this)
+{
     const Field *fld = NULL;
+    uint16_t *chars = NULL;
+    Frame *cur_frame = currentFrame(thread);
     Object *str = getLocal(cur_frame, 1)->val.vref;
 
     if ((fld = findFieldByName(str, "string")) == NULL) {
@@ -8087,25 +7946,31 @@ static Operand *javalangclassloader_findLoadedClass(Thread *thread,
     }
 
     const Object *name = fld->op->val.vref;
-    uint16_t *chars = NULL;
 
-    if ((chars = calloc(name->data.array.len, sizeof(uint16_t))) == NULL)
+    if ((chars = calloc(name->array.len, sizeof(uint16_t))) == NULL) {
+        /* TODO throw memory error ? */
         return NULL;
+    }
 
-    for (ssize_t i = 0; i < name->data.array.len; i++)
-        chars[i] = name->data.array.data[i]->val.vchar;
+    for (ssize_t i = 0; i < name->array.len; i++)
+        chars[i] = name->array.data[i]->val.vchar;
 
-    char *ascii = parseUtf16ToAscii(chars, name->data.array.len);
+    char *ascii = parseUtf16ToAscii(chars, name->array.len);
     free(chars);
     chars = NULL;
 
-    const ClassFile *cf = findClass2(thread, ascii, false);
+    if (ascii == NULL) {
+        /* TODO throw memory error ? */
+        return NULL;
+    }
+
+    const ClassFile *cf = findClass2(thread, ascii, false, this); /* should this be NULL? */
     free(ascii);
     ascii = NULL;
 
     if (cf) {
         cur_frame->ret = newOperand(TYPE_OREF, getClassObject(thread,
-                    (ClassFile *)cf));
+                    (ClassFile *)cf, true));
     } else {
         cur_frame->ret = newOperand(TYPE_NULL, NULL);
     }
@@ -8113,12 +7978,62 @@ static Operand *javalangclassloader_findLoadedClass(Thread *thread,
     return NULL;
 }
 
+__attribute__((nonnull))
+static Operand *fail_debug_print(Thread *thread, ClassFile *cls)
+{
+    Frame *cur_frame = currentFrame(thread);
+    Operand *argOp = getLocal(cur_frame, 0);
+    assert(argOp != NULL);
+    Object *argObj = argOp->val.vref;
+    assert(argObj != NULL);
+
+    printf("fail_debug_print: [%d]: |<", argObj->array.len);
+
+    bool lastOk = false;
+
+    for (uint32_t i = 0; i < argObj->array.len; i++)
+        if (!argObj->array.data[i])
+            break;
+        else if (isprint(argObj->array.data[i]->val.vbyte)) {
+            printf("%c", argObj->array.data[i]->val.vbyte);
+            lastOk = true;
+        } else {
+            if (lastOk)
+                fputc(' ', stdout);
+            printf("%#x ", argObj->array.data[i]->val.vbyte);
+            lastOk = false;
+        }
+
+    printf(">|\n");
+
+    return NULL;
+}
+
+static int32_t getLine(const Frame *fr)
+{
+    int32_t line = -1;
+    if (fr->mi && fr->mi->code && fr->mi->code->lineno ) {
+        const Code_attribute *code = fr->mi->code;
+        for (ssize_t i = 0; i < code->lineno->line_number_table_length; i++)
+        {
+            const line_number_t *li = &code->lineno->line_number_table[i];
+            if (fr->pc >= li->start_pc && fr->pc < li->end_pc) {
+                line = li->line_number;
+                break;
+            }
+        }
+    }
+    return line;
+}
+
+
+    __attribute__((nonnull))
 static Operand *javalangthrowable_fillInStackTrace(Thread *thread,
-        ClassFile *cls, Object *this)
+        ClassFile * /*cls*/, Object *this)
 {
     Frame *cur_frame = currentFrame(thread);
 
-    ClassFile *ste_c = findClass(thread, "java.lang.StackTraceElement");
+    ClassFile *ste_c = findClass(thread, "java.lang.StackTraceElement", NULL);
     if (ste_c == NULL)
         return NULL;
 
@@ -8134,12 +8049,14 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread,
 
     int arrpos = 0;
     method_info *mi = findMethodByClass(thread, ste_c, "<init>",
-            "(Ljava.lang.String;Ljava.lang.String;Ljava.lang.String;I)V");
+            "(Ljava.lang.String;Ljava.lang.String;Ljava.lang.String;I)V", INVOKE_VIRTUAL);
     Operand *ex_opr;
     Object *str = NULL;
 
     for (ssize_t sp = thread->frame_free - 2; sp >= 2; sp--, arrpos++)
     {
+        assert(sp < trace->array.len);
+
         Frame *fr = thread->stack[sp];
         if (fr == NULL) {
             warnx("fr == NULL @ %ld", sp);
@@ -8155,8 +8072,7 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread,
         /* declaringClass */
         if ((ex_opr = newString(thread,
                         fr->class ?
-                        fr->class->this_class->d.class.name->d.utf8.ascii :
-                        "unknown",
+                        getClassName(fr->class->this_class) : "unknown",
                         &str)) != NULL)
             return ex_opr;
         if (!push(cur_frame, newOperand(TYPE_OREF, str))) {
@@ -8166,7 +8082,7 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread,
 
         /* methodName */
         if ((ex_opr = newString(thread,
-                        fr->mi ? fr->mi->name->d.utf8.ascii : "unknown",
+                        fr->mi ? fr->mi->name->utf8.ascii : "unknown",
                         &str)) != NULL)
             return ex_opr;
         if (!push(cur_frame, newOperand(TYPE_OREF, str))) {
@@ -8175,11 +8091,10 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread,
         }
 
         /* fileName */
-        if ((ex_opr = newString(thread,
-                        (fr->class && fr->class->srcfile) ?
-                        fr->class->srcfile->d.utf8.ascii :
-                        "unknown",
-                        &str)) != NULL)
+        const char *fileName = (fr->class && fr->class->srcfile) ?
+            fr->class->srcfile->utf8.ascii : "unknown";
+
+        if ((ex_opr = newString(thread, fileName, &str)) != NULL)
             return ex_opr;
         if (!push(cur_frame, newOperand(TYPE_OREF, str))) {
             warnx("unable to push: " ERR_AT);
@@ -8188,17 +8103,7 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread,
 
         int32_t line = -1;
 
-        if (fr->mi && fr->mi->code && fr->mi->code->lineno ) {
-            const Code_attribute *code = fr->mi->code;
-            for (ssize_t i = 0; i < code->lineno->line_number_table_length; i++)
-            {
-                const line_number_t *li = &code->lineno->line_number_table[i];
-                if (fr->pc >= li->start_pc && fr->pc < li->end_pc) {
-                    line = li->line_number;
-                    break;
-                }
-            }
-        }
+        line = getLine(fr);
 
         if (line == -1) {
             warnx("No linenumber for %d: mi:%s code:%s lineno:%s", fr->pc,
@@ -8206,16 +8111,19 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread,
                     (fr->mi && fr->mi->code) ? "true" : "false",
                     (fr->mi && fr->mi->code && fr->mi->code->lineno) ? "true" : "false");
         }
+        else {
+            dbg_printf(ANSI_BYEL "(fillInStackTrace: %s:%u)\n" ANSI_RESET, fileName, line);
+        }
 
         if (!push(cur_frame, newOperand(TYPE_INT, &line))) {
             warnx("unable to push: " ERR_AT);
             return NULL;
         }
 
-        if ((ex_opr = invokeMethod(thread, mi, true, 0)) != NULL)
+        if ((ex_opr = invokeMethod(thread, mi, true, 0, INVOKE_SPECIAL)) != NULL)
             return ex_opr;
 
-        trace->data.array.data[arrpos] = newOperand(TYPE_OREF, ste_o);
+        trace->array.data[arrpos] = newOperand(TYPE_OREF, ste_o);
 
     }
 
@@ -8223,332 +8131,154 @@ static Operand *javalangthrowable_fillInStackTrace(Thread *thread,
     return NULL;
 }
 
-#if 0
-static const internalClass tmp_Object = {
-    .name = "java.lang.Object",
-    .access = ACC_PUBLIC,
-    .methods = {
-        {.name = NULL}
-    },
-    .super = "java.lang.Object"
-};
-
-static const internalClass tmp_Class = {
-    .name = "java.lang.Class",
-    .access = ACC_PUBLIC,
-    .methods = {
-        {.name = NULL}
-    },
-    .super = "java.lang.Object"
-};
-
-static const internalClass tmp_String = {
-    .name = "java.lang.String",
-    .access = ACC_PUBLIC,
-    .methods = {
-        {.name = NULL}
-    },
-    .super = "java.lang.Object"
-};
-#endif
-
-static internalClass java_lang_Throwable = {
+static const internalClass java_lang_Throwable = {
     .name = "java.lang.Throwable",
     .methods = {
-        { .name = "fillInStackTrace", .desc = "()Ljava.lang.Throwable;", .meth.mvirtual = javalangthrowable_fillInStackTrace },
+        { .name = "fillInStackTrace", .desc = "()Ljava.lang.Throwable;", .mvirtual = javalangthrowable_fillInStackTrace },
         {.name = NULL}
     }
 };
 
-static internalClass java_lang_Object = {
+static const internalClass java_lang_Object = {
     .name = "java.lang.Object",
     .methods = {
-        { .name = "hashCode", .desc = "()I",                .meth.mvirtual = javalangobject_hashCode },
-        { .name = "getClass", .desc = "()Ljava.lang.Class;",.meth.mvirtual = javalangobject_getClass },
+        { .name = "hashCode", .desc = "()I",                .mvirtual = javalangobject_hashCode },
+        { .name = "getClass", .desc = "()Ljava.lang.Class;",.mvirtual = javalangobject_getClass },
         {.name = NULL}
     }
 };
 
-static internalClass java_io_FileOutputStream = {
+static const internalClass java_io_FileOutputStream = {
     .name = "java.io.FileOutputStream",
     .methods = {
-        { .name = "write", .desc = "(I)V",  .meth.mvirtual = fileoutputstream_writeb },
-        { .name = "write", .desc = "([B)V", .meth.mvirtual = fileoutputstream_writebarray },
+        { .name = "write", .desc = "(I)V",  .mvirtual = fileoutputstream_writeb },
+        { .name = "write", .desc = "([B)V", .mvirtual = fileoutputstream_writebarray },
         {.name = NULL}
     }
 };
 
-static internalClass java_io_FileInputStream = {
+static const internalClass java_io_FileInputStream = {
     .name = "java.io.FileInputStream",
     .methods = {
-        { .name = "read", .desc = "()I",    .meth.mvirtual = fileinputstream_readint },
+        { .name = "read", .desc = "()I",    .mvirtual = fileinputstream_readint },
         {.name = NULL}
     }
 };
 
-static internalClass java_io_File = {
+static const internalClass java_io_File = {
     .name = "java.io.File",
     .methods = {
-        { .name = "stat", .desc = "()V", .meth.mvirtual = file_stat },
-        { .name = "access", .desc = "()V", .meth.mvirtual = file_access },
+        { .name = "stat", .desc = "()V", .mvirtual = file_stat },
+        { .name = "access", .desc = "()V", .mvirtual = file_access },
         {.name = NULL}
     }
 };
 
-static internalClass java_io_FileDescriptor = {
+static const internalClass java_io_FileDescriptor = {
     .name = "java.io.FileDescriptor",
     .methods = {
-        { .name = "sysClose", .desc = "(I)V",                   .meth.mvirtual = filedescriptor_sysClose },
-        { .name = "sysOpen",  .desc = "(Ljava.lang.String;Z)I", .meth.mvirtual = filedescriptor_sysOpen },
+        { .name = "sysClose", .desc = "(I)V",                   .mvirtual = filedescriptor_sysClose },
+        { .name = "sysOpen",  .desc = "(Ljava.lang.String;Z)I", .mvirtual = filedescriptor_sysOpen },
         {.name = NULL}
     }
 };
 
-static internalClass java_lang_Thread = {
+static const internalClass java_lang_Thread = {
     .name = "java.lang.Thread",
     .methods = {
-        { .name = "nativeStart",    .desc = "()V",                  .meth.mvirtual = javalangthread_nativeStart },
-        { .name = "sleep",          .desc = "(JI)V",                .meth.mstatic = javalangthread_sleep },
-        { .name = "currentThread",  .desc = "()Ljava.lang.Thread;", .meth.mstatic = javalangthread_currentThread },
+        { .name = "nativeStart",    .desc = "()V",                  .mvirtual = javalangthread_nativeStart },
+        { .name = "sleep",          .desc = "(JI)V",                .mstatic = javalangthread_sleep },
+        { .name = "currentThread",  .desc = "()Ljava.lang.Thread;", .mstatic = javalangthread_currentThread },
         {.name = NULL}
     }
 };
 
-static internalClass java_lang_reflect_Array = {
+static const internalClass java_lang_reflect_Array = {
     .name = "java.lang.reflect/Array",
     .methods = {
-        { .name = "newInstance", .desc = "(Ljava.lang.Class;[I)Ljava.lang.Object;", .meth.mstatic = javalangreflectarray_newInstance },
+        { .name = "newInstance", .desc = "(Ljava.lang.Class;[I)Ljava.lang.Object;", .mstatic = javalangreflectarray_newInstance },
         {.name = NULL}
     }
 };
 
-static internalClass java_lang_System = {
+static const internalClass java_lang_System = {
     .name = "java.lang.System",
     .methods = {
-        { .name = "exit",               .desc = "(I)V", .meth.mstatic = javalangsystem_exit },
-        { .name = "currentTimeMillis",  .desc = "()J",  .meth.mstatic = javalangsystem_currentTimeMillis },
+        { .name = "exit",               .desc = "(I)V", .mstatic = javalangsystem_exit },
+        { .name = "currentTimeMillis",  .desc = "()J",  .mstatic = javalangsystem_currentTimeMillis },
         {.name = NULL}
     }
 };
 
-static internalClass java_lang_ClassLoader = {
+static const internalClass java_lang_ClassLoader = {
     .name = "java.lang.ClassLoader",
     .methods = {
-        { .name = "findLoadedClass",    .desc = "(Ljava.lang.String;)Ljava.lang.Class;", .meth.mvirtual = javalangclassloader_findLoadedClass },
-        { .name = "findClass",          .desc = "(Ljava.lang.String;)Ljava.lang.Class;", .meth.mvirtual = javalangclassloader_findClass },
+        { .name = "findLoadedClass",    .desc = "(Ljava.lang.String;)Ljava.lang.Class;", .mvirtual = javalangclassloader_findLoadedClass },
+        { .name = "findClass",          .desc = "(Ljava.lang.String;)Ljava.lang.Class;", .mvirtual = javalangclassloader_findClass },
         {.name = NULL}
     }
 };
 
-static internalClass java_lang_Double = {
+static const internalClass java_lang_Double = {
     .name = "java.lang.Double",
     .methods = {
-        { .name = "longBitsToDouble",   .desc = "(J)D", .meth.mstatic = javalangdouble_longBitsToDouble },
-        { .name = "doubleToRawLongBits",.desc = "(D)J", .meth.mstatic = javalangdouble_doubleToRawLongBits },
+        { .name = "longBitsToDouble",   .desc = "(J)D", .mstatic = javalangdouble_longBitsToDouble },
+        { .name = "doubleToRawLongBits",.desc = "(D)J", .mstatic = javalangdouble_doubleToRawLongBits },
         {.name=NULL}
     }
 };
 
-static internalClass java_lang_Float = {
+static const internalClass java_lang_Float = {
     .name = "java.lang.Float",
     .methods = {
-        { .name = "intBitsToFloat",    .desc = "(I)F", .meth.mstatic = javalangfloat_intBitsToFloat    },
-        { .name = "floatToRawIntBits", .desc = "(F)I", .meth.mstatic = javalangfloat_floatToRawIntBits },
+        { .name = "intBitsToFloat",    .desc = "(I)F", .mstatic = javalangfloat_intBitsToFloat    },
+        { .name = "floatToRawIntBits", .desc = "(F)I", .mstatic = javalangfloat_floatToRawIntBits },
         {.name=NULL}
     }
 };
 
-static internalClass java_lang_Math = {
+static const internalClass java_lang_Math = {
     .name = "java.lang.Math",
     .methods = {
-        { .name = "atan2",  .desc = "(DD)D",.meth.mstatic = javalangmath_atan2 },
-        { .name = "hypot",  .desc = "(DD)D",.meth.mstatic = javalangmath_hypot },
-        { .name = "acos",   .desc = "(D)D", .meth.mstatic = javalangmath_acos },
-        { .name = "asin",   .desc = "(D)D", .meth.mstatic = javalangmath_asin },
-        { .name = "atan",   .desc = "(D)D", .meth.mstatic = javalangmath_atan },
-        { .name = "atan2",  .desc = "(D)D", .meth.mstatic = javalangmath_atan2 },
-        { .name = "cos",    .desc = "(D)D", .meth.mstatic = javalangmath_cos },
-        { .name = "cosh",   .desc = "(D)D", .meth.mstatic = javalangmath_cosh },
-        { .name = "sin",    .desc = "(D)D", .meth.mstatic = javalangmath_sin },
-        { .name = "sinh",   .desc = "(D)D", .meth.mstatic = javalangmath_sinh },
-        { .name = "exp",    .desc = "(D)D", .meth.mstatic = javalangmath_exp },
-        { .name = "log",    .desc = "(D)D", .meth.mstatic = javalangmath_log },
-        { .name = "log10",  .desc = "(D)D", .meth.mstatic = javalangmath_log10 },
-        { .name = "log1p",  .desc = "(D)D", .meth.mstatic = javalangmath_log1p },
-        { .name = "sqrt",   .desc = "(D)D", .meth.mstatic = javalangmath_sqrt },
+        { .name = "atan2",  .desc = "(DD)D",.mstatic = javalangmath_atan2 },
+        { .name = "hypot",  .desc = "(DD)D",.mstatic = javalangmath_hypot },
+        { .name = "acos",   .desc = "(D)D", .mstatic = javalangmath_acos },
+        { .name = "asin",   .desc = "(D)D", .mstatic = javalangmath_asin },
+        { .name = "atan",   .desc = "(D)D", .mstatic = javalangmath_atan },
+        { .name = "atan2",  .desc = "(D)D", .mstatic = javalangmath_atan2 },
+        { .name = "cos",    .desc = "(D)D", .mstatic = javalangmath_cos },
+        { .name = "cosh",   .desc = "(D)D", .mstatic = javalangmath_cosh },
+        { .name = "sin",    .desc = "(D)D", .mstatic = javalangmath_sin },
+        { .name = "sinh",   .desc = "(D)D", .mstatic = javalangmath_sinh },
+        { .name = "exp",    .desc = "(D)D", .mstatic = javalangmath_exp },
+        { .name = "log",    .desc = "(D)D", .mstatic = javalangmath_log },
+        { .name = "log10",  .desc = "(D)D", .mstatic = javalangmath_log10 },
+        { .name = "log1p",  .desc = "(D)D", .mstatic = javalangmath_log1p },
+        { .name = "sqrt",   .desc = "(D)D", .mstatic = javalangmath_sqrt },
         {.name=NULL}
     }
 };
 
-static internalClass java_nio_ImplFileChannel = {
-	.name = "java.nio.ImplFileChannel",
-	.methods = {
-		{ .name = "read", .desc = "(Ljava.nio.ByteBuffer;J)J", .meth.mvirtual = nio_implfilechannel_read     },
-		//{ .name = "read", .desc = "(Ljava.nio.ByteBuffer;)I",  .meth.mvirtual = nio_implfilechannel_read_pos },
-		{.name=NULL}
-	}
+static const internalClass java_nio_channels_ImplFileChannel = {
+    .name = "java.nio.channels.ImplFileChannel",
+    .methods = {
+        //{ .name = "read", .desc = "(Ljava.nio.ByteBuffer;J)J", .meth.mvirtual = nio_implfilechannel_read     },
+        //{ .name = "read", .desc = "(Ljava.nio.ByteBuffer;)I",  .meth.mvirtual = nio_implfilechannel_read_pos },
+        { .name = "nativeWrite", .desc = "(BJ)I", .mvirtual = niochannels_implfilechannel_nativewrite           },
+        {.name=NULL}
+    }
 };
 
-#if 0
-ClassFile *buildInternalClass(internalClass *ic)
-{
-    uint16_t cp_ptr = 1;
-
-    cp_info *tmp_utf8 = NULL;
-    cp_info *tmp_class = NULL;
-    const char *super = NULL;
-    field_info *tmp_fi = NULL;
-    method_info *tmp_mi = NULL;
-    cp_info **tmp_cp = NULL;
-
-    ClassFile *ret = calloc(1, sizeof(ClassFile));
-    if (ret == NULL) goto fail;
-
-    ret->access_flags = ic->access;
-    if ((ret->constant_pool = calloc(1000, sizeof(cp_info *))) == NULL) goto fail;
-
-    if ((tmp_utf8 = calloc(1, sizeof(cp_info))) == NULL) goto fail;
-    tmp_utf8->tag = CONSTANT_Utf8;
-    tmp_utf8->d.utf8.length = (uint16_t)(strlen(ic->name));
-    if ((tmp_utf8->d.utf8.bytes = calloc(1, tmp_utf8->d.utf8.length + 1U)) == NULL) goto fail;
-
-    strcpy((char *)tmp_utf8->d.utf8.bytes, ic->name);
-    fixupCpUtf8(tmp_utf8);
-
-    if ((tmp_class = calloc(1, sizeof(cp_info))) == NULL) goto fail;
-    tmp_class->tag = CONSTANT_Class;
-    tmp_class->d.class.name = tmp_utf8;
-
-    ret->this_class_idx = cp_ptr;
-    ret->this_class = tmp_class;
-    ret->constant_pool[cp_ptr++] = tmp_class;
-    ret->constant_pool[cp_ptr++] = tmp_class->d.class.name;
-
-    if ((ret->methods = calloc(MAX_METHODS, sizeof(method_info *))) == NULL)
-        goto fail;
-
-    if (ic->super == NULL && strcmp(ic->name, "java.lang.Object")) {
-        super = strdup("java.lang.Object");
-    } else
-        super = strdup(ic->super);
-
-    if (super)
-        ret->super_name = strdup(super);
-
-    for (int i = 0; i < MAX_METHODS && ic->methods[i].name; i++)
-    {
-        tmp_mi = calloc(1, sizeof(method_info));
-        if (tmp_mi == NULL) goto fail;
-
-        tmp_mi->access_flags = ic->methods[i].access;
-
-        cp_info *name = calloc(1, sizeof(cp_info));
-        name->d.utf8.length = (uint16_t)strlen(ic->methods[i].name);
-        name->tag = CONSTANT_Utf8;
-        if ((name->d.utf8.bytes = calloc(1, name->d.utf8.length + 1U)) == NULL) goto fail;
-        if ((tmp_mi->name = name) == NULL) goto fail;
-        strcpy((char *)name->d.utf8.bytes, ic->methods[i].name);
-
-        cp_info *descriptor = calloc(1, sizeof(cp_info));
-        descriptor->d.utf8.length = (uint16_t)strlen(ic->methods[i].desc);
-        descriptor->tag = CONSTANT_Utf8;
-        if ((name->d.utf8.bytes = calloc(1, descriptor->d.utf8.length + 1U)) == NULL) goto fail;
-        if ((tmp_mi->descriptor = descriptor) == NULL) goto fail;
-        strcpy((char *)descriptor->d.utf8.bytes, ic->methods[i].desc);
-
-        tmp_mi->name_index = cp_ptr;
-        ret->constant_pool[cp_ptr++] = tmp_mi->name;
-
-        tmp_mi->descriptor_index = cp_ptr;
-        ret->constant_pool[cp_ptr++] = tmp_mi->descriptor;
-
-        fixupCpUtf8(name);
-        fixupCpUtf8(descriptor);
-
-        if (tmp_mi->access_flags & ACC_STATIC) {
-            if ((tmp_mi->nativeMethod.mstatic = ic->methods[i].meth.mstatic) != NULL)
-                tmp_mi->access_flags |= ACC_NATIVE;
-        } else {
-            if ((tmp_mi->nativeMethod.mvirtual = ic->methods[i].meth.mvirtual) != NULL)
-                tmp_mi->access_flags |= ACC_NATIVE;
-        }
-
-        tmp_mi->class = ret;
-
-        if (!parseMethodDescriptor(&tmp_mi->desc, ic->methods[i].desc)) goto fail;
-
-        ret->methods[ret->methods_count++] = tmp_mi;
-        tmp_mi = NULL;
+static const internalClass fail_Debug = {
+    .name = "fail.Debug",
+    .methods = {
+        { .name = "print", .desc = "([B)V", .mstatic = fail_debug_print },
+        {.name=NULL}
     }
-
-    if ((ret->fields = calloc(MAX_FIELDS, sizeof(field_info *))) == NULL)
-        goto fail;
-
-
-    for (int i = 0; i < MAX_FIELDS && ic->fields[i].name; i++)
-    {
-        tmp_fi = calloc(1, sizeof(field_info));
-        if (tmp_fi == NULL) goto fail;
-
-        tmp_fi->class = ret;
-        tmp_fi->access_flags = ic->fields[i].access;
-
-        cp_info *name = calloc(1, sizeof(cp_info));
-        name->tag = CONSTANT_Utf8;
-        name->d.utf8.length = (uint16_t)strlen(ic->fields[i].name);
-        if ((tmp_fi->name = name) == NULL) goto fail;
-        if ((name->d.utf8.bytes = calloc(1, name->d.utf8.length + 1U)) == NULL) goto fail;
-        strcpy((char *)name->d.utf8.bytes, ic->fields[i].name);
-
-        cp_info *descriptor = calloc(1, sizeof(cp_info));
-        descriptor->tag = CONSTANT_Utf8;
-        descriptor->d.utf8.length = (uint16_t)strlen(ic->fields[i].desc);
-        if ((tmp_fi->descriptor = descriptor) == NULL) goto fail;
-        if ((descriptor->d.utf8.bytes = calloc(1, descriptor->d.utf8.length + 1U)) == NULL) goto fail;
-        strcpy((char *)descriptor->d.utf8.bytes, ic->fields[i].desc);
-
-        tmp_fi->name_index = cp_ptr;
-        ret->constant_pool[cp_ptr++] = tmp_fi->name;
-
-        tmp_fi->descriptor_index = cp_ptr;
-        ret->constant_pool[cp_ptr++] = tmp_fi->descriptor;
-
-        fixupCpUtf8(name);
-        fixupCpUtf8(descriptor);
-
-        if (parseParamDescriptor(&tmp_fi->desc, ic->fields[i].desc) == NULL) goto fail;
-
-        ret->fields[ret->fields_count++] = tmp_fi;
-        tmp_fi = NULL;
-    }
-
-    ret->constant_pool_count = cp_ptr;
-    tmp_cp = realloc(ret->constant_pool, sizeof(cp_info *) * (cp_ptr + 1U));
-    if (tmp_cp == NULL) {
-        warn("buildInternalClass");
-        goto fail;
-    }
-    ret->constant_pool = tmp_cp;
-    return ret;
-fail:
-    if (ret) {
-        if (tmp_fi) {
-            free(tmp_fi);
-            tmp_fi = NULL;
-        }
-        if (tmp_mi) {
-            free(tmp_mi);
-            tmp_mi = NULL;
-        }
-        free(ret);
-        ret = NULL;
-    }
-    warnx("Failed to process internalClass");
-    return NULL;
-}
-#endif
+};
 
 #ifdef DEBUG
+__attribute__((nonnull))
 static void dumpConstantPool(const int me, const cp_info *cp)
 {
     printf(" [%2d]: ", me);
@@ -8558,65 +8288,65 @@ static void dumpConstantPool(const int me, const cp_info *cp)
         case CONSTANT_Class:
             {
                 printf("class:  name[%d]="ANSI_BRED"%s"ANSI_RESET,
-                        cp->d.class.name_index,
-                        cp->d.class.name->d.utf8.ascii
-                        //cp->d.class.original_name
+                        cp->class.name_index,
+                        getClassName(cp)
+                        //cp->class.original_name
                         );
             }
             break;
         case CONSTANT_Fieldref:
             {
-                const cp_Fieldref_info *ent = &cp->d.fr;
+                const cp_Fieldref_info *ent = &cp->fr;
                 printf("fieldr: class[%d]=%s nametype[%d]=%s %s",
                         ent->class_index,
-                        ent->class->d.class.name->d.utf8.ascii,
+                        getClassName(ent->class),
                         ent->name_and_type_index,
-                        ent->nametype->d.nt.name->d.utf8.ascii,
-                        ent->nametype->d.nt.descriptor->d.utf8.ascii
+                        ent->nametype->nt.name->utf8.ascii,
+                        ent->nametype->nt.descriptor->utf8.ascii
                       );
             }
             break;
         case CONSTANT_Methodref:
             {
-                const cp_Fieldref_info *ent = &cp->d.fr;
+                const cp_Fieldref_info *ent = &cp->fr;
                 printf("methdr: class[%d]=%s nametype[%d]='%s %s'",
                         ent->class_index,
-                        ent->class->d.class.name->d.utf8.ascii,
+                        getClassName(ent->class),
                         ent->name_and_type_index,
-                        ent->nametype->d.nt.name->d.utf8.ascii,
-                        ent->nametype->d.nt.descriptor->d.utf8.ascii
+                        ent->nametype->nt.name->utf8.ascii,
+                        ent->nametype->nt.descriptor->utf8.ascii
                       );
             }
             break;
         case CONSTANT_NameAndType:
             {
-                const cp_NameAndType_info *ent = &cp->d.nt;
+                const cp_NameAndType_info *ent = &cp->nt;
                 printf("nm&typ: name[%d]='%s' descriptor[%d]='%s'",
                         ent->name_index,
-                        ent->name->d.utf8.ascii,
+                        ent->name->utf8.ascii,
                         //ent->original_name,
                         ent->descriptor_index,
-                        ent->descriptor->d.utf8.ascii
+                        ent->descriptor->utf8.ascii
                         //,ent->original_descriptor
                       );
             }
             break;
         case CONSTANT_String:
             {
-                const cp_String_info *ent = &cp->d.str;
+                const cp_String_info *ent = &cp->str;
                 printf("string: utf8[%d]='%s'", ent->string_index,
-                        ent->string->d.utf8.ascii);
+                        ent->string->utf8.ascii);
             }
             break;
         case CONSTANT_Utf8:
             {
-                const cp_Utf8_info *ent = &cp->d.utf8;
+                const cp_Utf8_info *ent = &cp->utf8;
                 printf("utf8:   bytes='%s'", ent->ascii);
             }
             break;
         case CONSTANT_Integer:
             {
-                const cp_Integer_info *ent = &cp->d.tint;
+                const cp_Integer_info *ent = &cp->tint;
                 printf("int:    c_int='%d'", ent->c_int);
             }
             break;
@@ -8637,11 +8367,12 @@ static enum std_attr_e lookupPredefinedAttribute(const char *name)
     return ATTR_INVALID;
 }
 
+__attribute__((nonnull))
 static void dumpAttribute(const attribute_info *ai)
 {
     int val;
-    printf("attr=%s ", ai->name ? ai->name->d.utf8.ascii : "<<missing name>>");
-    switch((val = lookupPredefinedAttribute(ai->name->d.utf8.ascii)))
+    printf("attr=%s ", ai->name ? ai->name->utf8.ascii : "<<missing name>>");
+    switch((val = lookupPredefinedAttribute(ai->name->utf8.ascii)))
     {
         case ATTR_CODE:
             printf("max_stack=%d max_locals=%d code_length=%d attributes=%d exceptions=%d",
@@ -8662,8 +8393,7 @@ static void dumpAttribute(const attribute_info *ai)
                             ex->start_pc,
                             ex->end_pc,
                             ex->handler_pc,
-                            ex->catch_type ? ex->catch_type->d.class.name->d.utf8.ascii :
-                            "<none");
+                            ex->catch_type ? getClassName(ex->catch_type) : "<none");
                 }
             }
             //printf("\n"); disasm(ai->d.code->code, ai->d.code->code_length);
@@ -8683,6 +8413,9 @@ static void dumpAttribute(const attribute_info *ai)
                         buf);
             }
             return;
+        case ATTR_BOOTSTRAPMETHODS:
+            printf("<<ATTR_BOOTSTRAPMETHODS[%d] not supported>>", val);
+            break;
         case ATTR_INVALID:
             printf("<<ATTR_INVALID[%d] not supported>>", val);
             break;
@@ -8691,8 +8424,7 @@ static void dumpAttribute(const attribute_info *ai)
             for (int i = 0; i < ai->d.exception->number_of_exceptions; i++)
             {
                 printf("   [%d]: exception=%s\n", i,
-                        ai->d.exception->exception_index_table[i]->d.class.name->d.utf8.ascii
-                        //ai->d.exception->exception_index_table[i]->d.class.original_name
+                        getClassName(ai->d.exception->exception_index_table[i])
                         );
             }
             break;
@@ -8704,16 +8436,16 @@ static void dumpAttribute(const attribute_info *ai)
                   );
             break;
         case ATTR_STACKMAPTABLE:
-        case ATTR_BOOTSTRAPMETHODS:
         case ATTR_SOURCEFILE:
         case ATTR_LINENUMBERTABLE:
         default:
-            printf("<<ATTR [%s] not implemented [%d]>>", ai->name->d.utf8.ascii, val);
+            printf("<<ATTR [%s] not implemented [%d]>>", ai->name->utf8.ascii, val);
             break;
     }
     printf("\n");
 }
 
+__attribute__((nonnull))
 static void dumpField(const int me, const field_info *fi)
 {
     char buf[BUFSIZ];
@@ -8722,8 +8454,8 @@ static void dumpField(const int me, const field_info *fi)
     printAccessFlags(fi->access_flags, buf, BUFSIZ);
     printf("access=%s name=%s descriptor=%s\n",
             buf,
-            fi->name->d.utf8.ascii,
-            fi->descriptor->d.utf8.ascii
+            fi->name->utf8.ascii,
+            fi->descriptor->utf8.ascii
           );
 
     for (int i = 0; i < fi->attributes_count; i++)
@@ -8733,6 +8465,7 @@ static void dumpField(const int me, const field_info *fi)
     }
 }
 
+__attribute__((nonnull))
 static void dumpMethod(const int me, method_info *mi)
 {
     printf(" [%2d]: ", me);
@@ -8740,9 +8473,9 @@ static void dumpMethod(const int me, method_info *mi)
     printAccessFlags(mi->access_flags, buf, BUFSIZ);
     printf("access=%s name="ANSI_BRED"%s"ANSI_RESET" descriptor="ANSI_BMAG"%s"ANSI_RESET"\n",
             buf,
-            mi->name->d.utf8.ascii,
+            mi->name->utf8.ascii,
             //mi->original_name,
-            mi->descriptor->d.utf8.ascii
+            mi->descriptor->utf8.ascii
             //mi->original_descriptor
           );
 
@@ -8755,6 +8488,7 @@ static void dumpMethod(const int me, method_info *mi)
 #endif
 
 /* aquires jvm->rwlock */
+__attribute__((nonnull))
 static bool findHeapSlot(const Thread *const thread, Object *const obj)
 {
     JVM *const jvm = (JVM *)thread->jvm;
@@ -8776,10 +8510,10 @@ static bool findHeapSlot(const Thread *const thread, Object *const obj)
 
             break;
         }
-    
+
     if (!ret && jvm->maxHeap < MAX_HEAP) {
         Object **newheap;
-        uint16_t newMaxHeap = (uint16_t)((jvm->maxHeap + 128U > MAX_HEAP) ? 
+        uint16_t newMaxHeap = (uint16_t)((jvm->maxHeap + 128U > MAX_HEAP) ?
                 MAX_HEAP : (jvm->maxHeap + 128U));
 
         if ((newheap = realloc(jvm->heap, sizeof(Object *) * newMaxHeap)) != NULL) {
@@ -8790,6 +8524,8 @@ static bool findHeapSlot(const Thread *const thread, Object *const obj)
 
             jvm->heap[jvm->maxHeap] = obj;
             obj->heaploc = jvm->maxHeap;
+            if (obj->heaploc == -1)
+                warnx("findHeapSlot: jvm->maxHeap is -1");
             jvm->maxHeap = newMaxHeap;
 
             ret = true;
@@ -8807,27 +8543,40 @@ static bool findHeapSlot(const Thread *const thread, Object *const obj)
 
 // FIXME common code with newObject
 
+__attribute__((malloc(freeObject,2),nonnull(1,3)))
 static Object *newMultiArray(Thread *thread, uint8_t type, int32_t *sizes,
         uint8_t dim, const ClassFile *clsType)
 {
-    Object *ret = NULL;
+    Object *new_array_obj = NULL;
     int32_t size = 0;
     char buf[BUFSIZ] = {0};
-    //long nowt = 0;
     int rc;
     bool pti = false;
+#ifdef DEBUG
+    Frame *cur_frame = currentFrame(thread);
+#endif
+
+    dbg_printf("newMultiArray [%s, %d[%d]]: called from %s:%u\n",
+            printOpType(type), dim, sizes[0],
+            cur_frame->class ? cur_frame->class->srcfile->utf8.ascii : "<>",
+            getLine(cur_frame));
 
     if (type == TYPE_NULL) {
         warnx("newMultiArray: type is NULL");
         goto fail;
     }
 
-    if ((ret = calloc(1, sizeof(Object)))== NULL) {
+    if (type == TYPE_OREF && clsType == NULL)
+        abort();
+
+    /* danger, we are duplicating the logic of newObject here but with a (potentially
+     * bespoke Class */
+    if ((new_array_obj = calloc(1, sizeof(Object)))== NULL) {
         warn("newMultiArray: calloc");
         goto fail;
     }
 
-    if ((rc = pthread_mutex_init(&ret->monitor, NULL)) != 0) {
+    if ((rc = pthread_mutex_init(&new_array_obj->monitor, NULL)) != 0) {
         strerror_r(rc, buf, sizeof(buf));
         warnx("newMultiArray: pthread_mutex_init: %s", buf);
         goto fail;
@@ -8835,17 +8584,13 @@ static Object *newMultiArray(Thread *thread, uint8_t type, int32_t *sizes,
 
     pti = true;
 
-    if (!thread) {
-        ret->heaploc = -1;
-        warnx("newMultiArray: no thread");
-        goto fail;
-    } else if (!findHeapSlot(thread, ret)) {
+    if (!findHeapSlot(thread, new_array_obj)) {
         warnx("newMultiArray: findHeapSlot");
         goto fail;
     }
 
-    ret->type = OBJ_ARRAY;
-    ret->data.array.type = type;
+    new_array_obj->type = OBJ_ARRAY;
+    new_array_obj->array.type = type;
 
     for (ssize_t i = 0; i < dim; i++) {
         strcat(buf, "[");
@@ -8860,74 +8605,77 @@ static Object *newMultiArray(Thread *thread, uint8_t type, int32_t *sizes,
     buf[dim+1] = '\0';
 
     if (type == TYPE_OREF) {
-        strcat(buf, clsType->this_class->d.class.name->d.utf8.ascii);
+        strcat(buf, getClassName(clsType->this_class));
         strcat(buf, ";");
     } else if(type == TYPE_AREF)
         abort();
 
-    if (isClassLoaded(thread, buf))
-        ret->class = findClass(thread, buf);
-    else {
-        ret->class_obj = createClassForArray(thread, type, dim, clsType); // fixme
-        ret->class = NULL;
+    if (isClassLoaded(thread, buf)) {
+        new_array_obj->class = findClass(thread, buf, NULL);
+        //new_array_obj->class_obj = new_array_obj->class->class_object;
+        if (!new_array_obj->class)
+            warnx("newMultiArray: no class");
+    } else {
+        dbg_printf("newMultiArray: creating a new class for %s\n", buf);
+        if ((new_array_obj->class = createClassForArray(thread, type, dim, clsType)) == NULL)
+            abort();
+        //new_array_obj->class_obj = new_array_obj->class->class_object;
     }
 
-    ret->data.array.len = size;
-    ret->data.array.dimensions = dim;
-    ret->data.array.sizes = sizes;
+    dbg_printf("newMultiArray: class is now %s, class_obj is now %s\n",
+            getClassName(new_array_obj->class->this_class),
+            new_array_obj->class->class_object
+            ? getClassName(new_array_obj->class->class_object->class->this_class)
+            : "<>");
+
+    new_array_obj->array.len = size;
+    new_array_obj->array.dimensions = dim;
+    new_array_obj->array.sizes = sizes;
+    new_array_obj->array.className = strdup(buf);
 
     if (size > 0) {
-        if ((ret->data.array.data = calloc(size, sizeof(Operand *))) == NULL) {
+        if ((new_array_obj->array.data = calloc(size, sizeof(Operand *))) == NULL) {
             warn("newMultiArray: calloc");
             goto fail;
         }
-
-        /*
-           if ( (type != TYPE_AREF) && (type != TYPE_OREF) && (type != TYPE_VOID) && (type != TYPE_NULL) )
-           for (ssize_t i = 0; i < size; i++)
-           ret->data.array.data[i] = newOperand(type, &nowt);
-           */
     }
-#ifdef DEBUG_CODE
-    printf("newMultiArray: %s %s [",
+
+#ifdef DEBUG
+    dbg_printf("newMultiArray: %s %s [",
             printOpType(type),
-            clsType ?  clsType->this_class->d.class.name->d.utf8.ascii : "<n/a>");
+            clsType ? getClassName(clsType->this_class) : "<n/a>");
     for (ssize_t i = 0; i < dim ; i++)
-        printf("%d%s",sizes[i], i < dim-1 ? "," : "" );
-    printf("]\n");
+        dbg_printf("%d%s",sizes[i], i < dim-1 ? "," : "" );
+    dbg_printf("] @ %p\n", (void *)new_array_obj);
 #endif
-    ret->className = strdup(clsType ? clsType->this_class->d.class.name->d.utf8.ascii : "<none>");
-    return ret;
+    return new_array_obj;
 
 fail:
     free(sizes);
     sizes = NULL;
-    if (ret) {
+    if (new_array_obj) {
         if (pti)
-            pthread_mutex_destroy(&ret->monitor);
+            pthread_mutex_destroy(&new_array_obj->monitor);
 
-        if (thread && ret->heaploc != - 1) {
+        if (/*thread &&*/ new_array_obj->heaploc != - 1) {
             if (pthread_rwlock_wrlock(&((JVM *)thread->jvm)->rwlock))
                 err(EXIT_FAILURE, "newMultiArray: wrlock");
-            ((JVM *)thread->jvm)->heap[ret->heaploc] = NULL;
+            ((JVM *)thread->jvm)->heap[new_array_obj->heaploc] = NULL;
             if (pthread_rwlock_unlock(&((JVM *)thread->jvm)->rwlock))
                 err(EXIT_FAILURE, "newMultiArray: unlock");
         }
-        free(ret);
-        ret = NULL;
+        free(new_array_obj);
+        new_array_obj = NULL;
     }
     return NULL;
 
 }
 
-static Object *newArray(Thread *thread, uint8_t type, int32_t size,
-        const ClassFile *clsType)
+__attribute__((nonnull))
+static Object *newArray(Thread *thread, uint8_t type, int32_t size, const ClassFile *clsType)
 {
-    //if (size == 0)
-    //  warnx("array %c is 0 length for clsType:%s", type, clsType == NULL ? "(null)" : 
-    //          clsType->this_class->d.class.name->d.utf8.ascii);
+    int32_t *const sizes = calloc(2, sizeof(uint32_t));
 
-    int32_t *sizes = calloc(2, sizeof(uint32_t));
     if (sizes == NULL) {
         warn("newArray: calloc");
         return NULL;
@@ -8939,22 +8687,21 @@ static Object *newArray(Thread *thread, uint8_t type, int32_t size,
     return newMultiArray(thread, type, sizes, 1U, clsType);
 }
 
+__attribute__((nonnull))
 static uint16_t getSuperFieldCount(const Thread *thread, const ClassFile *const cls)
 {
     assert(thread->jvm->VM == true);
     assert(cls != NULL);
 
-    //printf("getSuperFieldCount: %s\n", cls->this_class->name->ascii);
-    if(cls == NULL)
-        warnx("getSuperFieldCount: class is null");
-    else if(cls->super_class)
+    if(cls->super_class)
         return (uint16_t)(cls->fields_count + getSuperFieldCount(thread,
-                    findClass((Thread *)thread, cls->super_name)));
+                    findClass((Thread *)thread, cls->super_name, NULL)));
     else
         return cls->fields_count;
     return 0;
 }
 
+__attribute__((malloc(freeObject,2)))
 static Object *newObject(Thread *thread, const ClassFile *const cls)
 {
     uint32_t fldptr = 0;
@@ -8972,6 +8719,9 @@ static Object *newObject(Thread *thread, const ClassFile *const cls)
         warnx("newObject: NULL class");
         return NULL;
     }
+#ifdef DEBUG
+    printf("newObject: %s\n", getClassName(cls->this_class));
+#endif
 
     Object *ret = calloc(1, sizeof(Object));
     if (ret == NULL) {
@@ -8987,11 +8737,11 @@ static Object *newObject(Thread *thread, const ClassFile *const cls)
 
     pti = true;
 
-    if (!thread)
+    if (!thread) {
+        warnx("newObject: allocated off heap");
         ret->heaploc = -1;
-    else if (!findHeapSlot(thread, ret)) {
+    } else if (!findHeapSlot(thread, ret)) {
         warnx("newObject: no heapslot");
-        __asm__("int $3");
         goto fail;
     }
 
@@ -9000,20 +8750,19 @@ static Object *newObject(Thread *thread, const ClassFile *const cls)
 
     field_count = getSuperFieldCount(thread, cls);
 
-    if ((fields = ret->data.obj.fields = calloc(field_count + 1U,
+    if ((fields = ret->obj.fields = calloc(field_count + 1U,
                     sizeof(Field))) == NULL) {
         warn("newObject: fields calloc");
         goto fail;
     }
 
-    ret->data.obj.num_fields = field_count;
-
+    ret->obj.num_fields = field_count;
 
     while(super)
     {
         for (int i = 0; i < super->fields_count; fldptr++, i++)
         {
-            uint32_t nowt = 0;
+            uint64_t nowt = 0;
 
             fields[fldptr].field_info = super->fields[i];
             switch(super->fields[i]->desc.baseType)
@@ -9033,32 +8782,28 @@ static Object *newObject(Thread *thread, const ClassFile *const cls)
         }
 
         if (super->super_class) {
-            super = findClass(thread, super->super_name);
+            super = findClass(thread, super->super_name, NULL);
         } else
             super = NULL;
     }
 
-#ifdef DEBUG_CODE
-    printf("newObject: OBJ_CLASS heap_id=%d class=%s\n",
+    dbg_printf("newObject: OBJ_CLASS heap_id=%d class=%s @ %p\n",
             ret->heaploc,
-            cls->this_class->d.class.name->d.utf8.ascii);
-#endif
-
-    if ((ret->className = strdup(cls->this_class->d.class.name->d.utf8.ascii)) == NULL)
-        warn("newObject: className strdup");
-
+            getClassName(cls->this_class),
+            (void *)ret);
     return ret;
+
 fail:
     warnx("Unable to create Object from %s",
-            cls->this_class->d.class.name->d.utf8.ascii);
+            getClassName(cls->this_class));
     if (ret) {
         if (pti) {
             pthread_mutex_destroy(&ret->monitor);
         }
         if (ret->type == OBJ_CLASS) {
-            if (ret->data.obj.fields) {
-                free(ret->data.obj.fields);
-                ret->data.obj.fields = NULL;
+            if (ret->obj.fields) {
+                free(ret->obj.fields);
+                ret->obj.fields = NULL;
             }
         }
         if (thread && ret->heaploc != -1) {
@@ -9075,12 +8820,13 @@ fail:
 }
 
 #ifdef DEBUG
+__attribute__((nonnull))
 void dumpClass(const ClassFile *cf)
 {
     char buf[BUFSIZ];
 
-    printf( "Class: %s\n", 
-            cf->this_class->d.class.name->d.utf8.ascii
+    printf( "Class: %s\n",
+            getClassName(cf->this_class)
             //cf->canonical_name,
             //cf->original_name
             );
@@ -9089,7 +8835,7 @@ void dumpClass(const ClassFile *cf)
             cf->major_version,
             cf->minor_version,
             buf,
-            cf->super_class ? cf->super_class->d.class.name->d.utf8.ascii : "(none)",
+            cf->super_class ? getClassName(cf->super_class) : "(none)",
             cf->this_class_idx
           );
     printf( "Constant Pool [%2d]:\n", cf->constant_pool_count);
@@ -9125,24 +8871,8 @@ void dumpClass(const ClassFile *cf)
 }
 #endif
 
-static const char *search[] = {
-    "cp",
-    "cp/java",
-    "cp/java/lang",
-    "cp/java/lang/annotation",
-    "cp/java/lang/reflect",
-    "cp/java/math"
-    "cp/java/io",
-    "cp/java/nio",
-    "cp/java/nio/channels",
-    "cp/java/text",
-    "cp/java/util",
-    "cp/fail",
-    "test",
-    NULL
-};
-
-static ClassFile *loadClass(Thread *const thread, const char *restrict sfile)
+__attribute__((nonnull(1,2)))
+static ClassFile *loadClass(Thread *const thread, const char *restrict sfile, Object *classLoader)
 {
     ClassFile *ret;
     FILE *fp;
@@ -9154,14 +8884,10 @@ static ClassFile *loadClass(Thread *const thread, const char *restrict sfile)
     assert(sfile != NULL);
     assert(*sfile != 0);
 
-#ifdef DEBUG
-    printf("(loadClass: %s)\n", sfile);
-#endif
+    dbg_printf("(loadClass: %s)\n", sfile);
 
     if ((fp = fopen(sfile, "r")) != NULL) {
-#ifdef DEBUG
-        printf("(loadClass trying.0: %s direct found)\n", sfile);
-#endif
+        dbg_printf("(loadClass trying.0: %s direct found)\n", sfile);
         goto found;
     }
 
@@ -9184,29 +8910,23 @@ static ClassFile *loadClass(Thread *const thread, const char *restrict sfile)
         start--;
     }
 
-#ifdef DEBUG
-    printf("(loadClass normalised to: %s)\n", file);
-#endif
+    dbg_printf("(loadClass normalised to: %s)\n", file);
 
     if (strchr(file, '/')) {
-        if(snprintf(buf, sizeof(buf), "cp/%s%s", file,
+        if(snprintf(buf, sizeof(buf), "%s/%s%s", opt_classpath, file,
                     strstr(file, ".class") != NULL ? "" : ".class") > (int)sizeof(buf)) {
             STRING_TOO_LONG();
         }
-#ifdef DEBUG
-    printf(" (loadClass trying.1: %s)\n", buf);
-#endif
+        dbg_printf(" (loadClass trying.1: %s)\n", buf);
         fp = fopen(buf, "r");
 
     } else {
 
-        /* this is a bit of a mess as .2 .3 .4 are (rarely? never?) used and 
+        /* this is a bit of a mess as .2 .3 .4 are (rarely? never?) used and
          * should be instead made to use the classpath to search */
         snprintf(buf, sizeof(buf), "%s", file);
 
-#ifdef DEBUG
-    printf(" (loadClass trying.2: %s)\n", buf);
-#endif
+        dbg_printf(" (loadClass trying.2: %s)\n", buf);
         if ((fp = fopen(buf, "r")) == NULL) {
             for (int i = 0; search[i]; i++)
             {
@@ -9214,18 +8934,14 @@ static ClassFile *loadClass(Thread *const thread, const char *restrict sfile)
                             search[i], file) > (int)sizeof(buf)) {
                     STRING_TOO_LONG();
                 }
-#ifdef DEBUG
-    printf(" (loadClass trying.3: %s)\n", buf);
-#endif
+                dbg_printf(" (loadClass trying.3: %s)\n", buf);
                 if ((fp = fopen(buf, "r")) != NULL) break;
 
                 if(snprintf(buf, sizeof(buf), "%s/%s.class", search[i],
                             file) > (int)sizeof(buf)) {
                     STRING_TOO_LONG();
                 }
-#ifdef DEBUG
-    printf(" (loadClass trying.4: %s)\n", buf);
-#endif
+                dbg_printf(" (loadClass trying.4: %s)\n", buf);
                 if ((fp = fopen(buf, "r")) != NULL) break;
 
             }
@@ -9238,19 +8954,15 @@ static ClassFile *loadClass(Thread *const thread, const char *restrict sfile)
     }
 
 found:
-    ret = parseClass(thread, fp);
+    ret = parseClass(thread, fp, sfile, classLoader);
     if (!ret)
         warnx("loadClass: parseClass failed for %s", buf);
     fclose(fp);
 
-#ifdef DEBUG
-    //if (ret)
-    //  dumpClass(ret);
-#endif
-
     return ret;
 }
 
+__attribute__((nonnull))
 static void freeAttribute(attribute_info *const ai)
 {
     const struct predefinedAttribute *pa;
@@ -9258,8 +8970,8 @@ static void freeAttribute(attribute_info *const ai)
 
     for (int i = 0; ((pa = &predefinedAttrs[i])->name) != NULL; i++)
     {
-        if (!ai->name || !ai->name->d.utf8.ascii ||
-                strcmp(ai->name->d.utf8.ascii, pa->name)) continue;
+        if (!ai->name || !ai->name->utf8.ascii ||
+                strcmp(ai->name->utf8.ascii, pa->name)) continue;
 
         switch (pa->attr)
         {
@@ -9274,6 +8986,19 @@ static void freeAttribute(attribute_info *const ai)
                 found = true;
                 free((void *)ai->d.srcfile);
                 ai->d.srcfile = NULL;
+                break;
+            case ATTR_BOOTSTRAPMETHODS:
+                found = true;
+                for (int j = 0; j < ai->d.bootstrap->num_bootstrap_methods; j++) {
+                    if (ai->d.bootstrap->bootstrap_methods[j]) {
+                        if (ai->d.bootstrap->bootstrap_methods[j]->bootstrap_arguments) {
+                            free(ai->d.bootstrap->bootstrap_methods[j]->bootstrap_arguments);
+                            ai->d.bootstrap->bootstrap_methods[j]->bootstrap_arguments = NULL;
+                        }
+                    }
+                    free(ai->d.bootstrap->bootstrap_methods[j]);
+                    ai->d.bootstrap->bootstrap_methods[j] = NULL;
+                }
                 break;
             case ATTR_CODE:
                 found = true;
@@ -9420,7 +9145,6 @@ static void freeAttribute(attribute_info *const ai)
                 free((void *)ai->d.exception);
                 ai->d.exception = NULL;
                 break;
-            case ATTR_BOOTSTRAPMETHODS:
             case ATTR_INVALID:
                 found = true;
                 break;
@@ -9434,7 +9158,8 @@ static void freeAttribute(attribute_info *const ai)
     free(ai);
 }
 
-#ifdef DEBUG_CODE
+#ifdef DEBUG
+__attribute__((nonnull))
 const char *printObject(const Object *const o)
 {
     static char buf[BUFSIZ] = {0};
@@ -9457,10 +9182,18 @@ const char *printObject(const Object *const o)
     {
         case OBJ_ARRAY:
             fprintf(bfp, "%s[%d]",
-                    printOpType(o->data.array.type),
-                    o->data.array.len);
+                    printOpType(o->array.type),
+                    o->array.len);
+            if (o->array.type == TYPE_OREF)
+                fprintf(bfp, " %s",
+                    o->array.className);
             break;
+
         case OBJ_CLASS:
+            if (o->class && o->class->this_class)
+                fprintf(bfp, "%s", getClassName(o->class->this_class));
+            else
+                fprintf(bfp, "<null class name>");
             break;
         default:
             errx(EXIT_FAILURE, "printObject: unknown type: %d", o->type);
@@ -9472,95 +9205,108 @@ const char *printObject(const Object *const o)
 #endif
 
 /* caller must have a wrlock on jvm */
+__attribute__((nonnull))
 static bool freeObject(JVM *const jvm, Object *restrict const o)
 {
-    if (o->type == OBJ_CLASS && o->class->isInnerClass) {
-        if (o->lock > 1)
-            return false;
-    } else if (o->lock)
-        return false;
+    assert(o != NULL);
+    assert(jvm != NULL);
 
-    if ((pthread_mutex_trylock(&o->monitor) != 0))
+    if (o->type == OBJ_CLASS) {
+        assert(o->class != NULL);
+    }
+
+    if (o->type == OBJ_CLASS && o->class->isInnerClass) {
+        if (o->lock > 1) /* TODO where is this extra lock set? */
+            return false;
+    } else if (o->lock) {
         return false;
+    }
+
+    if ((pthread_mutex_trylock(&o->monitor) != 0)) {
+        return false;
+    }
+
+    assert(o->freed == 0);
+
+    //dbg_printf("freeObject: %p lock:%d %s\n", (void *)o, o->lock, printObject(o));
 
     switch (o->type)
     {
         case OBJ_CLASS:
             {
-                if (o->data.obj.fields) {
-                    for (int i = 0; i < o->data.obj.num_fields; i++)
+                if (o->obj.fields) {
+                    for (int i = 0; i < o->obj.num_fields; i++)
                     {
                         Operand *tmpO;
-                        if ( (tmpO = o->data.obj.fields[i].op) != NULL ) {
-#if 0
-                            printf(" (freeField %d %s ", i, printOpType(tmpO->type));
-                            if (tmpO->type == TYPE_OREF)
-                                printf("%s", printOpValue(tmpO));
-                            printf(")\n");
-#endif
+                        if ( (tmpO = o->obj.fields[i].op) != NULL ) {
                             freeAndNullOperand(&tmpO);
                         }
-                        o->data.obj.fields[i].op = NULL;
+                        o->obj.fields[i].op = NULL;
                     }
-                    free(o->data.obj.fields);
-                    o->data.obj.fields = NULL;
+                    free(o->obj.fields);
+                    o->obj.fields = NULL;
                 }
 
-				if (o->data.obj.native_data) {
-					assert(o->data.obj.native_free != NULL);
-					o->data.obj.native_free(o->data.obj.native_data);
-					o->data.obj.native_data = NULL;
-				}
+                if (o->obj.native_data) {
+                    assert(o->obj.native_free != NULL);
+                    o->obj.native_free(o->obj.native_data);
+                    o->obj.native_data = NULL;
+                }
             }
             break;
+
         case OBJ_ARRAY:
             {
                 int count = 0;
-                for(uint32_t i = 0; i < o->data.array.len; i++) {
-                    if(!o->data.array.data[i])
+                for(uint32_t i = 0; i < o->array.len; i++) {
+                    if(!o->array.data[i])
                         continue;
+
                     count++;
-#if 0
-                    int lock =
-#endif
-                        freeAndNullOperand(&o->data.array.data[i]);
-#if 0
-                    if (lock != -1)
-                        printf(" (freeObject [OBJ_ARRAY] [%d/%d] lock.now=%d\n", i, o->data.array.len, lock);
-#endif
-                    o->data.array.data[i] = NULL;
+                    freeAndNullOperand(&o->array.data[i]);
                 }
                 //printf("Freeing Array [%d]\n", count);
-                free(o->data.array.data);
-                o->data.array.data = NULL;
-                free(o->data.array.sizes);
-                o->data.array.sizes = NULL;
+                free(o->array.data);
+                o->array.data = NULL;
+                free(o->array.sizes);
+                o->array.sizes = NULL;
+                free((void *)o->array.className);
+                o->array.className = NULL;
             }
             break;
+
         default:
             warnx("freeObject: unknown type %d", o->type);
     }
 
-    if (o->heaploc != -1)
+    if (o->heaploc != -1) {
         jvm->heap[o->heaploc] = NULL;
+    } else {
+        warnx("freeObject: heaploc is -1");
+        abort();
+    }
 
     pthread_mutex_unlock(&o->monitor);
     pthread_mutex_destroy(&o->monitor);
 
-    if (o->className) {
-        free(o->className);
-    }
+    // use-after-free
+    //if (o->class && o->class->isDynamic)
+    //    freeClass(jvm, (ClassFile *)o->class);
+
+    memset(o, 0, sizeof(Object));
+    o->freed = 1;
     free(o);
     return true;
 }
 
 /* caller must have wrlock on jvm */
+__attribute__((nonnull))
 static void freeClass(JVM *const jvm, ClassFile *restrict const cf)
 {
     char buf[BUFSIZ] = {0};
     int rc;
 
-    if ((rc = pthread_rwlock_wrlock(&cf->rwlock))) {
+    if ((rc = pthread_rwlock_trywrlock(&cf->rwlock))) {
         strerror_r(rc, buf, sizeof(buf));
         warnx("freeClass: pthread_rwlock_wrlock: %s", buf);
         return;
@@ -9570,6 +9316,7 @@ static void freeClass(JVM *const jvm, ClassFile *restrict const cf)
         // lock++ in createClass
         cf->class_object->lock--;
         freeObject(jvm, cf->class_object);
+        //cf->class_object->class = NULL;
         cf->class_object = NULL;
     }
 
@@ -9593,15 +9340,6 @@ static void freeClass(JVM *const jvm, ClassFile *restrict const cf)
             }
 
             freeAndNullOperand(&fi->static_operand);
-
-            if(fi->desc.className) {
-                free((void *)fi->desc.className);
-                fi->desc.className = NULL;
-            }
-            if (fi->desc.orig_className) {
-                free((void *)fi->desc.orig_className);
-                fi->desc.orig_className = NULL;
-            }
 
             free(fi);
             cf->fields[i] = NULL;
@@ -9633,32 +9371,12 @@ static void freeClass(JVM *const jvm, ClassFile *restrict const cf)
                 for (int j = 0; j < mi->desc.num_params; j++)
                 {
                     if(mi->desc.params[j]) {
-                        if (mi->desc.params[j]->className) {
-                            free((void *)mi->desc.params[j]->className);
-                            mi->desc.params[j]->className = NULL;
-                        }
-                        if (mi->desc.params[j]->orig_className) {
-                            free((void *)mi->desc.params[j]->orig_className);
-                            mi->desc.params[j]->orig_className = NULL;
-                        }
                         free((void *)mi->desc.params[j]);
                     }
                 }
                 free(mi->desc.params);
                 mi->desc.params = NULL;
             }
-
-            if (mi->desc.ret.className)
-                free((void *)mi->desc.ret.className);
-
-            if (mi->desc.ret.orig_className)
-                free((void *)mi->desc.ret.orig_className);
-
-//          if (mi->original_name)
-//              free((void *)mi->original_name);
-
-//          if (mi->original_descriptor)
-//              free((void *)mi->original_descriptor);
 
             free(mi);
             cf->methods[i] = NULL;
@@ -9680,6 +9398,10 @@ static void freeClass(JVM *const jvm, ClassFile *restrict const cf)
         cf->attributes = NULL;
     }
 
+    /* handle dynamically created ClassFile's in newMultiArray */
+    if (cf->this_class && !cf->this_class->dyn)
+        cf->this_class = NULL;
+
     if (cf->constant_pool) {
         for (int i = 0; i < cf->constant_pool_count; i++)
         {
@@ -9691,24 +9413,15 @@ static void freeClass(JVM *const jvm, ClassFile *restrict const cf)
             {
                 case CONSTANT_NameAndType:
                     {
-                        //cp_NameAndType_info *nt = &cp->d.nt;
-//                      if (nt->original_name)
-//                          free((void *)nt->original_name);
-//                      if (nt->original_descriptor)
-//                          free((void *)nt->original_descriptor);
                     }
                     break;
                 case CONSTANT_Class:
                     {
-                        //cp_Class_info *ci = &cp->d.class;
-//                      if (ci->original_name)
-//                          free((char *)ci->original_name);
-//                      ci->original_name = NULL;
                     }
                     break;
                 case CONSTANT_String:
                     {
-                        cp_String_info *str = &cp->d.str;
+                        cp_String_info *str = &cp->str;
                         if (str->intern) {
                             // lock++ in fixupCpString
                             ((Object *)str->intern)->lock--;
@@ -9723,7 +9436,7 @@ static void freeClass(JVM *const jvm, ClassFile *restrict const cf)
                     break;
                 case CONSTANT_Utf8:
                     {
-                        cp_Utf8_info *utf8 = &cp->d.utf8;
+                        cp_Utf8_info *utf8 = &cp->utf8;
                         if (utf8->utf16) free(utf8->utf16);
                         utf8->utf16 = NULL;
                         if (utf8->ascii) free(utf8->ascii);
@@ -9746,16 +9459,6 @@ static void freeClass(JVM *const jvm, ClassFile *restrict const cf)
         cf->super_name = NULL;
     }
 
-//  if (cf->canonical_name) {
-//      free((char *)cf->canonical_name);
-//      cf->canonical_name = NULL;
-//  }
-
-//  if (cf->original_name) {
-//      free((char *)cf->original_name);
-//      cf->original_name = NULL;
-//  }
-
     if (cf->interfaces) {
         free(cf->interfaces);
         cf->interfaces = NULL;
@@ -9764,6 +9467,22 @@ static void freeClass(JVM *const jvm, ClassFile *restrict const cf)
     if (cf->interface_class) {
         free(cf->interface_class);
         cf->interface_class = NULL;
+    }
+
+    /* handle dynamically created ClassFile's in newMultiArray */
+    if (cf->this_class && cf->this_class->dyn) {
+        cp_info *cp;
+        if ((cp = cf->this_class->class.name)) {
+            if (cp->utf8.ascii)
+                free (cp->utf8.ascii);
+            if (cp->utf8.utf16)
+                free (cp->utf8.utf16);
+            if (cp->utf8.bytes)
+                free (cp->utf8.bytes);
+            free(cp);
+        }
+        free(cf->this_class);
+        cf->this_class = NULL;
     }
 
     if (cf->heaploc != -1)
@@ -9775,14 +9494,15 @@ static void freeClass(JVM *const jvm, ClassFile *restrict const cf)
     free(cf);
 }
 
-static void freeThread(Thread *restrict const t)
+__attribute__((nonnull))
+static bool freeThread(Thread *restrict const t)
 {
-#ifdef DEBUG
-//  printf("(freeThread %p)\n", (void *)t);
-#endif
     if (t->thread) {
         t->thread->lock--; // lock++ in newThread
-        assert(t->thread->lock == 0);
+        if(t->thread->lock != 0)
+            return false;
+        // warnx("thread still locked");
+        // assert(t->thread->lock == 0); /* inner classes explode?? */
     }
 
     /* checking for missing frames (probably a bug) or the initial frame (not a bug) */
@@ -9793,6 +9513,7 @@ static void freeThread(Thread *restrict const t)
         }
 
     free(t);
+    return true;
 }
 
 #if 0
@@ -9813,6 +9534,7 @@ static void printThreadState(th_state_en st, char *buf, int size)
 
 static JVM *jvm = NULL;
 
+__attribute__((nonnull))
 static void freeJVM(JVM *restrict const j)
 {
     int rc;
@@ -9822,7 +9544,7 @@ static void freeJVM(JVM *restrict const j)
 
     const struct timespec rqtp = {
         .tv_sec = 0,
-        .tv_nsec = 50000000L,
+        .tv_nsec = 500000L,
     };
 
     do {
@@ -9844,18 +9566,19 @@ static void freeJVM(JVM *restrict const j)
                 if (j->threads[id]->state == TH_FINISHED) {
                     pthread_join(j->threads[id]->pthread, (void **)&ex_op);
                     j->threads[id]->state = TH_DEAD;
-                    freeThread(j->threads[id]);
-                    j->threads[id] = NULL;
                     if (ex_op) {
                         const Object *ex_obj = ex_op->val.vref;
                         if (ex_op->type == TYPE_OREF && ex_obj && ex_obj->class) {
                             warnx("Uncaught exception %s",
-                                    ex_obj->class->this_class->d.class.name->d.utf8.ascii);
+                                    getClassName(ex_obj->class->this_class));
                         } else {
                             warnx("Uncaught exception (null)");
                         }
                         freeAndNullOperand(&ex_op);
                     }
+                    /* might be better to freeThread() here */
+                    freeThread(j->threads[id]);
+                    j->threads[id] = NULL;
                 } else if (j->threads[id]->state == TH_NEW) {
                     if (j->threads[id]->pthread)
                         pthread_join(j->threads[id]->pthread, (void **)&ex_op);
@@ -9874,11 +9597,12 @@ static void freeJVM(JVM *restrict const j)
     pthread_rwlock_destroy(&clslock);
 
     for (ssize_t i = 0; i < num_ary_maps; i++) {
-        if (ary_maps[i].object->lock > 0)
-            ((Object *)ary_maps[i].object)->lock--; // lock++ createClassForArray
+        if (ary_maps[i].class_file->class_object->lock > 0)
+            ((Object *)ary_maps[i].class_file->class_object)->lock--; // lock++ createClassForArray
         free((char *)ary_maps[i].canonical);
+        freeClass(j, ary_maps[i].class_file);
         ary_maps[i].canonical = NULL;
-        ary_maps[i].object = NULL;
+        ary_maps[i].class_file = NULL;
     }
 
     free(ary_maps);
@@ -9887,8 +9611,24 @@ static void freeJVM(JVM *restrict const j)
     for (uint16_t i = 0; i < MAX_METHOD; i++)
     {
         if (j->method_area[i]) {
-            freeClass(j, (ClassFile *)j->method_area[i]);
-            j->method_area[i] = NULL;
+            ClassFile *cf = j->method_area[i];
+            for (int k = 0; k < cf->fields_count; k++)
+                if ( (cf->fields[k]->access_flags & ACC_STATIC) == ACC_STATIC )
+                    if (cf->fields[k]->static_operand)
+                        freeAndNullOperand(&cf->fields[k]->static_operand);
+            if (cf->class_object) {
+                cf->class_object->lock--;
+                freeObject(j, cf->class_object);
+                cf->class_object = NULL;
+            }
+        }
+    }
+
+    /* not sure if this is the best place for this or not really */
+    for (uint16_t id = 0 ; id < MAX_THREADS; id++) {
+        if (j->threads[id] && j->threads[id]->state == TH_DEAD) {
+            freeThread(j->threads[id]);
+            j->threads[id] = NULL;
         }
     }
 
@@ -9904,22 +9644,58 @@ static void freeJVM(JVM *restrict const j)
                     j->heap[i] = NULL;
             }
         }
+        if (found == 0)
+            break;
+    }
+
+    for (uint16_t i = 0; i < MAX_METHOD; i++)
+    {
+        if (j->method_area[i]) {
+            freeClass(j, (ClassFile *)j->method_area[i]);
+            j->method_area[i] = NULL;
+        }
+    }
+
+    for (int k = 0; k < 10; k++)
+    {
+        found = 0;
+        for (uint16_t i = 0; i < j->maxHeap; i++)
+        {
+            if (j->heap[i]) {
+                found++;
+                if (freeObject(j, j->heap[i]))
+                    j->heap[i] = NULL;
+            }
+        }
+        if (found == 0)
+            break;
     }
 
     if (found) {
+#ifdef DEBUG
         warnx("%d objects still remain: totalOperands=%ld", found, totalOperands);
+#endif
         for (uint16_t i = 0; i < j->maxHeap; i++)
         {
             if (!j->heap[i]) continue;
+#ifdef DEBUG
             Object *o = j->heap[i];
+            dbg_printf("Object: %s\n", printObject(o));
             warnx("object: heap[%d=%d] OBJ_%s lock=%d class=%s",
                     o->heaploc,
                     i,
                     o->type == OBJ_CLASS ? "CLASS" : "ARRAY",
                     o->lock,
-                    o->className);
+                    (o->type == OBJ_CLASS) ?
+                        (o->class && o->class->this_class) ?
+                            getClassName(o->class->this_class) :
+                            "<null class>" :
+                        printOpType(o->array.type));
+#endif
         }
     }
+
+
 
 
     if (jvm == j) jvm = NULL;
@@ -9941,19 +9717,22 @@ static void cleanup(void)
     fclose(stderr);
 }
 
+__attribute__((nonnull))
 static ClassFile *processNatives(Thread *const thread, const internalClass *const ic)
 {
     ClassFile *cf = NULL;
 
-    if (!ic || !ic->name) {
+    if (!ic->name) {
         warnx("processNatives: missing name");
         goto fail;
     }
 
-    if ((cf = (ClassFile *)findClass(thread, ic->name)) == NULL) {
+    if ((cf = (ClassFile *)findClass(thread, ic->name, NULL)) == NULL) {
         warnx("processNatives: unable to load class: %s", ic->name);
         goto fail;
     }
+    
+    const method_info *mi;
 
     for (uint16_t i = 0; i < MAX_METHODS; i++)
     {
@@ -9964,8 +9743,11 @@ static ClassFile *processNatives(Thread *const thread, const internalClass *cons
             continue;
         }
 
-        const method_info *const mi = findMethodByClass(thread, cf,
-                ic->methods[i].name, ic->methods[i].desc);
+        if (ic->methods[i].mstatic)
+            mi = findMethodByClass(thread, cf, ic->methods[i].name, ic->methods[i].desc, INVOKE_STATIC);
+        else
+            mi = findMethodByClass(thread, cf, ic->methods[i].name, ic->methods[i].desc, INVOKE_VIRTUAL);
+
         if (mi == NULL) {
             warnx("processNatives: no such method %s:%s", ic->methods[i].name,
                     ic->methods[i].desc);
@@ -9979,27 +9761,23 @@ static ClassFile *processNatives(Thread *const thread, const internalClass *cons
         }
 
         if (mi->access_flags & ACC_STATIC)
-            ((method_info *)mi)->nativeMethod.mstatic =
-                ic->methods[i].meth.mstatic;
+            ((method_info *)mi)->nativeMethod.mstatic = ic->methods[i].mstatic;
         else
-            ((method_info *)mi)->nativeMethod.mvirtual =
-                ic->methods[i].meth.mvirtual;
-#ifdef DEBUG
-        printf("processNatives: patched in %s:%s\n", ic->methods[i].name,
+            ((method_info *)mi)->nativeMethod.mvirtual = ic->methods[i].mvirtual;
+
+        dbg_printf("processNatives: patched in %s:%s\n", ic->methods[i].name,
                 ic->methods[i].desc);
-#endif
     }
 
     return cf;
 fail:
-    warnx("processNatives: unable to process: %s", ic ? ic->name : "null");
+    warnx("processNatives: unable to process: %s", ic->name);
     return NULL;
 }
 
-
+__attribute__((nonnull(1)))
 static Thread *newThread(JVM *const jvm, Object *const thread)
 {
-    //printf("newThread: start\n");
     Thread *ret = NULL;
     int rc;
     char buf[BUFSIZ] = {0};
@@ -10012,7 +9790,7 @@ static Thread *newThread(JVM *const jvm, Object *const thread)
         ret->thread->lock++; // lock-- in freeThread
     } else if (jvm->VM) {
         if ((ret->thread = newObject(ret, findClass(ret,
-                            "java.lang.Thread"))) == NULL) goto fail;
+                            "java.lang.Thread", NULL))) == NULL) goto fail;
         ret->thread->lock++; // lock-- in freeThread
     } else // jvm->VM == false
         ret->thread = NULL;
@@ -10040,8 +9818,6 @@ static Thread *newThread(JVM *const jvm, Object *const thread)
     }
 
     if (th_id == MAX_THREADS) {
-        //pthread_rwlock_unlock(&ret->rwlock);
-        //pthread_rwlock_unlock(&jvm->rwlock);
         warnx("newThread: no free threads");
         goto fail;
     }
@@ -10049,7 +9825,6 @@ static Thread *newThread(JVM *const jvm, Object *const thread)
     jvm->threads[th_id] = ret;
     ret->state = TH_NEW;
     ret->thread_id = th_id;
-    //printf("newThread: created with thread_id=%d\n", ret->thread_id);
 
     pthread_rwlock_unlock(&jvm->rwlock);
     pthread_rwlock_unlock(&ret->rwlock);
@@ -10069,19 +9844,26 @@ fail:
 /* self->frame[0] is what was passed to startThread (stack based)
  * self->Frame[1] is the args to be used here (local based)
  */
+__attribute__((nonnull))
 static void *threadinit(void *arg)
 {
-    Thread *const self = (Thread *)arg;
-
-    //printf("inside threadinit\n");
-
     int rc;
+    Thread *const self = (Thread *)arg;
     char buf[BUFSIZ] = {0};
+
+    assert(self != NULL);
+
     if ((rc = pthread_rwlock_wrlock(&self->rwlock))) {
         strerror_r(rc, buf, sizeof(buf));
         warnx("threadinit: pthread_rwlock_wrlock: %s", buf);
         return NULL;
     }
+
+    if (self->state != TH_NEW) {
+        pthread_rwlock_unlock(&self->rwlock);
+        return NULL;
+    }
+
     Frame *const cur_frame = currentFrame(self);
     if (cur_frame == NULL)
         errx(EXIT_FAILURE, "threadInit: no current frame");
@@ -10120,16 +9902,14 @@ static void *threadinit(void *arg)
     self->state = TH_RUNNING;
     pthread_rwlock_unlock(&self->rwlock);
 
+    /* INVOKE_??? might be wrong */
     Operand *ret = NULL;
     if (isStatic) {
-        //printf("inside threadinit: about to invoke static\n");
-        ret = invokeMethod(self, self->cur_method, false, 0);
+        ret = invokeMethod(self, self->cur_method, false, 0, INVOKE_STATIC); /* STATIC? */
     } else {
-        //printf("inside threadinit: about to invoke non-static\n");
-        ret = invokeMethod(self, self->cur_method, true, 0);
+        ret = invokeMethod(self, self->cur_method, true, 0, INVOKE_VIRTUAL);
     }
 
-    //printf("inside threadinit: returned\n");
     if (ret) {
         while (cur_frame->sp)
             freeOperand(pop(cur_frame));
@@ -10141,10 +9921,10 @@ static void *threadinit(void *arg)
         } else {
             method_info *mi = findMethodByClass(self,
                     ((Operand *)ret)->val.vref->class,
-                    "printStackTrace", "()V");
+                    "printStackTrace", "()V", INVOKE_VIRTUAL);
             freeAndNullOperand(&ret);
             if (mi)
-                ret = invokeMethod(self, mi, true, 0);
+                ret = invokeMethod(self, mi, true, 0, INVOKE_VIRTUAL);
         }
     }
 
@@ -10159,6 +9939,7 @@ static void *threadinit(void *arg)
     return ret;
 }
 
+__attribute__((nonnull))
 static Operand *startThread(Thread *const thread)
 {
     Frame *const cur_frame = currentFrame(thread);
@@ -10173,7 +9954,7 @@ static Operand *startThread(Thread *const thread)
 
     if (thread->cur_method == NULL) {
         method_info *meth = findMethodByClass(thread,
-                th_obj->class, "run", "()V");
+                th_obj->class, "run", "()V", INVOKE_INTERFACE); /* public interface Runnable */
         thread->cur_method = meth;
     }
 
@@ -10207,29 +9988,52 @@ static Operand *startThread(Thread *const thread)
 
     const struct timespec rqtp = {
         .tv_sec = 0,
-        .tv_nsec = 100000000L,
+        .tv_nsec = 1000000L,
     };
 
     nanosleep(&rqtp, NULL);
     return NULL;
 }
 
-int main(const int ac, const char *const av[])
+__attribute__((noreturn,nonnull))
+static void show_usage(const char *const name, int rc)
 {
+    fprintf(stderr, "Usage: %s [-p CLASSPATH] CLASSFILE CLASSNAME\n", name);
+    exit(rc);
+}
+
+int main(int argc, char *argv[])
+{
+    {
+        int opt;
+        while ((opt = getopt(argc, argv, "hp:")) != -1)
+        {
+            switch (opt)
+            {
+                case 'h':
+                    show_usage(argv[0], EXIT_SUCCESS);
+                case 'p':
+                    opt_classpath = optarg;
+                    break;
+                default:
+                    show_usage(argv[0], EXIT_FAILURE);
+            }
+        }
+    }
+
+
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
     setvbuf(stdin, NULL, _IONBF, 0);
 
-    if (ac != 3) {
-        fprintf(stderr, "Missing arguments\nUsage: fail-jvm CLASSFILE MAINCLASSNAME\n");
-        exit(EXIT_FAILURE);
-    }
+    if (argc - optind != 2)
+        show_usage(argv[0], EXIT_FAILURE);
 
     if ((jvm = calloc(1, sizeof(JVM))) == NULL)
         err(EXIT_FAILURE, "boot: calloc(jvm)");
 
     if ((jvm->heap = calloc(DEF_HEAP, sizeof(Object *))) == NULL)
-        err(EXIT_FAILURE, "boot: calloc(jvm->heap)");
+        err(EXIT_FAILURE, "boot: calloc(jvm->heap[%u])", DEF_HEAP);
 
     jvm->maxHeap = DEF_HEAP;
     jvm->VM = false;
@@ -10244,7 +10048,6 @@ int main(const int ac, const char *const av[])
 
     atexit(cleanup);
 
-    ClassFile *cf = NULL;
     Thread *parent = NULL;
 
     if ((parent = newThread(jvm, NULL)) == NULL)
@@ -10255,20 +10058,23 @@ int main(const int ac, const char *const av[])
 
     Frame *cur_frame = parent->stack[parent->frame_free++] = newFrame(3, 2);
 
-    ClassFile *cls_String, *cls_Class, *cls_Object, *cls_ClassLoader;
+    ClassFile *cls_String, *cls_Class, *cls_Object, *cls_ClassLoader, *cls_Thread;
 
     /* load classes with circular references */
-    if ((cls_Object = loadClass(parent, "java.lang.Object")) == NULL) errx(1, "unable to load java.lang.Object");
-    if ((cls_String = loadClass(parent, "java.lang.String")) == NULL) errx(1, "unable to load java.lang.String");
-    if ((cls_Class = loadClass(parent, "java.lang.Class")) == NULL) errx(1, "unable to load java.lang.Class");
-    if ((cf = loadClass(parent, "java.lang.Thread")) == NULL) errx(1, "unable to load java.lang.Thread");
-    if ((cls_ClassLoader = loadClass(parent, "java.lang.ClassLoader")) == NULL) errx(1, "unable to load java.lang.ClassLoader");
+    if ((cls_Object = loadClass(parent, "java.lang.Object", NULL)) == NULL)
+        errx(1, "unable to load java.lang.Object");
+    if ((cls_String = loadClass(parent, "java.lang.String", NULL)) == NULL)
+        errx(1, "unable to load java.lang.String");
+    if ((cls_Class = loadClass(parent, "java.lang.Class", NULL)) == NULL)
+        errx(1, "unable to load java.lang.Class");
+    if ((cls_Thread = loadClass(parent, "java.lang.Thread", NULL)) == NULL)
+        errx(1, "unable to load java.lang.Thread");
+    if ((cls_ClassLoader = loadClass(parent, "java.lang.ClassLoader", NULL)) == NULL)
+        errx(1, "unable to load java.lang.ClassLoader");
 
     jvm->VM = true;
 
-#ifdef DEBUG
-    printf("boot: VM now enabled\n");
-#endif
+    dbg_printf("boot: VM now enabled\n");
 
     cls_Class->isLinked = true;
     cls_String->isLinked = true;
@@ -10285,9 +10091,8 @@ int main(const int ac, const char *const av[])
     cls_ClassLoader->isLinked = false;
     linkClass(parent, cls_ClassLoader);
 
-#ifdef DEBUG
-    printf("boot: linking early classes\n");
-#endif
+    dbg_printf("boot: linking early classes\n");
+
     /* ensure getClass() works on them */
     for (uint16_t i = 0; i < MAX_METHOD; i++)
     {
@@ -10298,35 +10103,45 @@ int main(const int ac, const char *const av[])
             linkClass(parent, ret);
     }
 
-#ifdef DEBUG
-    printf("boot: patching natives\n");
-#endif
+    dbg_printf("boot: patching natives\n");
+
     /* patch natives */
+    
+    ClassFile *cf = NULL;
     cf = processNatives(parent, &java_lang_Object);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) errx(EXIT_FAILURE, "boot: unable to process natives for java.lang.Object");
+
     cf = processNatives(parent, &java_io_FileOutputStream);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) warnx("boot: no java.io.FileOutputStream");
+
     cf = processNatives(parent, &java_io_FileInputStream);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) warnx("boot: no java.io.FileInputStream");
+
     cf = processNatives(parent, &java_io_File);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) warnx("boot: no java.io.File");
+
     cf = processNatives(parent, &java_lang_Thread);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) errx(EXIT_FAILURE, "boot: unable to process natives for java.lang.Thread");
+
     cf = processNatives(parent, &java_lang_Throwable);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) errx(EXIT_FAILURE, "boot: unable to process natives for java.lang.Throwable");
+
     cf = processNatives(parent, &java_lang_System);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) warnx("boot: no java.lang.System");
+
     cf = processNatives(parent, &java_lang_reflect_Array);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) warnx("boot: no java.lang.reflect.Array");
+
     cf = processNatives(parent, &java_lang_ClassLoader);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) errx(EXIT_FAILURE, "boot: unable to process natives for java.lang.ClassLoader");
+
     cf = processNatives(parent, &java_io_FileDescriptor);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) warnx("boot: no java.io.FileDescriptor");
 
     /* load primitive classes */
     for (ssize_t i = 0; primitiveClassMap[i].c_name; i++)
     {
-        ClassFile *cls = findClass(parent, primitiveClassMap[i].c_name);
+        ClassFile *cls = findClass(parent, primitiveClassMap[i].c_name, NULL);
         if (cls == NULL) {
             warnx("boot: unable to load %s", primitiveClassMap[i].c_name);
             continue;
@@ -10352,50 +10167,88 @@ int main(const int ac, const char *const av[])
 
     jvm->primUp = true;
 
-    if ((parent->thread = newObject(parent, findClass2(parent, "java.lang.Thread", false))) == NULL)
+    /* fix all the references from createClassForArray that were unable to primUp */
+    const ClassFile *jlClass = findClass2(parent, "java.lang.Class", false, NULL);
+    for (ssize_t i = 0; i < num_ary_maps; i++) {
+        if (ary_maps[i].class_file) {
+            if (ary_maps[i].class_file->super_class != jlClass->this_class)
+                continue;
+
+            dbg_printf("boot: checking %s\n", getClassName(ary_maps[i].class_file->this_class));
+
+            Object *tmpObj = ary_maps[i].class_file->class_object;
+            assert(tmpObj != NULL);
+
+            Field *fld = findFieldByName(tmpObj, "componentType");
+            assert(fld != NULL);
+
+            if (fld->op->type == TYPE_NULL) {
+                const int type = fld->op->val.vint; /* kludge */
+                dbg_printf("boot: fixing %s\n", getClassName(tmpObj->class->this_class));
+                freeAndNullOperand(&fld->op);
+                fld->op = newOperand(TYPE_OREF, findObjForPrim(type));
+                dbg_printf("boot: fixed to %s %s\n", printOpType(fld->op->type), printOpValue(fld->op));
+#ifdef DEBUG
+                dumpClass(ary_maps[i].class_file);
+#endif
+            }
+        }
+    }
+
+    if ((parent->thread = newObject(parent, findClass2(parent, "java.lang.Thread", false, NULL))) == NULL) {
         errx(EXIT_FAILURE, "boot: unable to create Thread Object");
+    }
+
     parent->thread->lock++;
 
     cf = processNatives(parent, &java_lang_Math);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) warnx("boot: no java.lang.Math");
+
     cf = processNatives(parent, &java_lang_Double);
-    if (cf == NULL) exit(1);
+    if (cf == NULL) warnx("boot: no java.lang.Double");
+
     cf = processNatives(parent, &java_lang_Float);
+    if (cf == NULL) warnx("boot: no java.lang.Float");
+
+    cf = processNatives(parent, &java_nio_channels_ImplFileChannel);
+    if (cf == NULL) warnx("boot: no java.nio.channels.ImplFileChannel");
+
+    cf = processNatives(parent, &fail_Debug);
+    if (cf == NULL) warnx("boot: no fail.Debug");
+
+    cf = findClass(parent, "java.lang.System", NULL);
     if (cf == NULL) exit(1);
+    if (!cf->isInit)
+        if (classInit(parent, cf))
+            errx(EXIT_FAILURE, "boot: error thrown in java.lang.System:<clsinit>");
 
-    cf = loadClass(parent, av[1]);
+    const char *const classfile = argv[optind++];
+    const char *const classname = argv[optind++];
 
-//#ifdef DEBUG
+    cf = loadClass(parent, classfile, NULL);
+
     printf("boot: VM loaded\n");
-//#endif
-    if (!cf) errx(EXIT_FAILURE, "boot: no main class");
+
+    if (!cf)
+        errx(EXIT_FAILURE, "boot: no main class");
     linkClass(parent, cf);
 
-    const char *const clsname = av[2];
-    const method_info *const m_Main = findClassMethod(parent, clsname, "main", "([Ljava.lang.String;)V");
+    method_info *const m_Main = findClassMethod(parent, classname, "main", "([Ljava.lang.String;)V", INVOKE_STATIC);
     if (m_Main == NULL)
-        errx(EXIT_FAILURE, "boot: Cannot find method main in class %s", clsname);
+        errx(EXIT_FAILURE, "boot: Cannot find method main in class %s", classname);
 
     parent->cur_method = m_Main;
 
     push(cur_frame, newOperand(TYPE_AREF,
                 newArray(parent, TYPE_OREF, 0,
-                    findClass(parent, "java.lang.String"))));
-
-#ifdef DEBUG
-    printf("\n\n\n\n\n");
-#endif
+                    findClass(parent, "java.lang.String", NULL))));
 
     startThread(parent);
 
     const struct timespec rqtp = {
-        .tv_sec = 2,
-        .tv_nsec = 50000000L,
+        .tv_sec = 0,
+        .tv_nsec = 2000000L,
     };
 
     nanosleep(&rqtp, NULL);
-    exit(1);
-//#ifdef DEBUG
-    printf("\n\nMain finished\n\n");
-//#endif
 }

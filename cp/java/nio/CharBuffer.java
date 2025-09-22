@@ -53,8 +53,7 @@ public abstract class CharBuffer extends Buffer implements Readable, Appendable,
     csqBuffer = str;
   }
 
-  protected CharBuffer(final int size)
-  {
+  protected CharBuffer(final int size) {
     super(size);
     hasArray = false;
     arrayOffset = 0;

@@ -37,7 +37,7 @@ public class URI implements Comparable<URI>, Serializable {
     final String path,
     final String query,
     final String fragment
-    ) {
+  ) {
     final StringBuilder sb = new StringBuilder();
     if (scheme != null) {
       sb.append(scheme);
@@ -77,7 +77,7 @@ public class URI implements Comparable<URI>, Serializable {
     final String path,
     final String query,
     final String fragment
-    ) {
+  ) {
     final StringBuilder sb = new StringBuilder();
     if (scheme != null) {
       sb.append(scheme);
@@ -126,7 +126,7 @@ public class URI implements Comparable<URI>, Serializable {
   public URI(
     final String nScheme, final String nUserInfo, final String nHost, final int nPort, final String nPath,
     final String nQuery, final String nFragment
-    ) throws URISyntaxException {
+  ) throws URISyntaxException {
     this(buildURIString(nScheme, nUserInfo, nHost, nPort, nPath, nQuery, nFragment));
     /* parseServerAuthority? */
   }
@@ -139,7 +139,7 @@ public class URI implements Comparable<URI>, Serializable {
 
   public URI(
     final String nScheme, final String nAuthority, final String nPath, final String nQuery, final String nFragment
-    ) throws URISyntaxException {
+  ) throws URISyntaxException {
     this(buildURIString(nScheme, nAuthority, nPath, nQuery, nFragment));
     /* parseServerAuthority() on the result? */
   }

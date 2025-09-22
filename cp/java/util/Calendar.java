@@ -64,8 +64,7 @@ public abstract class Calendar {
   }
 
   public static Calendar getInstance(final TimeZone zone, final Locale aLocale) {
-    System.out
-    .println("Requesting GregorianCalendar(" + zone.toString() + "," + aLocale.toString() + ")");
+    System.out.println("Requesting GregorianCalendar(" + zone.toString() + "," + aLocale.toString() + ")");
     return new GregorianCalendar(zone, aLocale);
   }
 
@@ -174,11 +173,7 @@ public abstract class Calendar {
     return "Blah";
   }
 
-  public Map<String, Integer> getDisplayNames(
-    final int field,
-    final int style,
-    final Locale aLocale
-    ) {
+  public Map<String, Integer> getDisplayNames(final int field, final int style, final Locale aLocale) {
     return null;
   }
 
@@ -244,13 +239,7 @@ public abstract class Calendar {
     set(DAY_OF_MONTH, date);
   }
 
-  public void set(
-    final int year,
-    final int month,
-    final int date,
-    final int hourOfDay,
-    final int minute
-    ) {
+  public void set(final int year, final int month, final int date, final int hourOfDay, final int minute) {
     set(year, month, date);
     set(HOUR_OF_DAY, hourOfDay);
     set(MINUTE, minute);
@@ -263,7 +252,7 @@ public abstract class Calendar {
     final int hourOfDay,
     final int minute,
     final int second
-    ) {
+  ) {
     set(year, month, date, hourOfDay, minute);
     set(SECOND, second);
   }

@@ -1,11 +1,11 @@
 package java.nio;
 
-class CharBufferView extends CharBuffer {
+final class CharBufferView extends CharBuffer {
 
   private final ByteBuffer buf;
   private final int        bufpos;
 
-  protected CharBufferView(final ByteBuffer str) {
+  CharBufferView(final ByteBuffer str) {
     super(str.remaining());
     buf = str;
     limit(str.remaining());

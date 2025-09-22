@@ -4,7 +4,7 @@ import java.util.Arrays;
 
 public final class StringBuffer implements CharSequence {
 
-  private char[] buffer;
+  private char[]       buffer;
   final private Object sync = new Object();
 
   public StringBuffer() {
@@ -20,7 +20,7 @@ public final class StringBuffer implements CharSequence {
   }
 
   public StringBuffer(final String str) {
-    synchronized(sync) {
+    synchronized (sync) {
       buffer = str.toCharArray();
     }
   }
@@ -46,19 +46,31 @@ public final class StringBuffer implements CharSequence {
 
     return this;
   }
-  
+
   public int capactiy() {
     return buffer.length;
   }
-  
+
   public void ensureCapacity(int minimumCapacity) {
-    synchronized(sync) {
+    synchronized (sync) {
       buffer = Arrays.copyOf(buffer, Math.max(minimumCapacity, buffer.length));
     }
   }
 
+  public StringBuffer append(Object o) {
+    return append(o.toString().toCharArray());
+  }
+
+  public StringBuffer append(String str) {
+    return append(str.toCharArray(), 0, str.length());
+  }
+
+  public StringBuffer append(CharSequence str) {
+    return append(str.toString().toCharArray(), 0, str.length());
+  }
+
   public StringBuffer append(CharSequence str, int offset, int len) {
-    return append(this.toString().toCharArray(), offset, len);
+    return append(str.toString().toCharArray(), offset, len);
   }
 
   @Override
@@ -68,7 +80,7 @@ public final class StringBuffer implements CharSequence {
 
   @Override
   public CharSequence subSequence(final int start, final int end) {
-    synchronized(sync) {
+    synchronized (sync) {
       return new String(Arrays.copyOfRange(buffer, start, end));
     }
   }

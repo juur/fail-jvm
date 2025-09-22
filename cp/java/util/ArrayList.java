@@ -4,8 +4,6 @@ import java.io.Serializable;
 
 public class ArrayList<E> extends AbstractList<E> implements RandomAccess, Cloneable, Serializable {
 
-  private static final long serialVersionUID = 1L;
-
   private static class ListIteratorImpl<E> implements ListIterator<E> {
 
     private final ArrayList<E> list;
@@ -67,11 +65,17 @@ public class ArrayList<E> extends AbstractList<E> implements RandomAccess, Clone
 
   }
 
+  private static final long serialVersionUID = 1L;
+
   private Object[] array;
   private int      last;
 
   public ArrayList() {
     this(10);
+  }
+
+  public ArrayList(final Collection<? extends E> c) {
+    this(c.toArray());
   }
 
   public ArrayList(final int i) {
@@ -107,6 +111,19 @@ public class ArrayList<E> extends AbstractList<E> implements RandomAccess, Clone
   }
 
   @Override
+  public boolean remove(final Object o) {
+    final int safe = modCount;
+    final int idx  = indexOf(o);
+    if (idx == -1)
+      return false;
+
+    if (safe != modCount)
+      throw new ConcurrentModificationException();
+
+    return remove(idx) != null;
+  }
+
+  @Override
   public E set(final int index, final E element) {
     if (index < 0 || index >= size())
       throw new IndexOutOfBoundsException();
@@ -118,19 +135,6 @@ public class ArrayList<E> extends AbstractList<E> implements RandomAccess, Clone
   @Override
   public int size() {
     return last + 1;
-  }
-
-  @Override
-  public boolean remove(Object o) {
-    int safe = modCount;
-    int idx  = indexOf(o);
-    if (idx == -1)
-      return false;
-    
-    if (safe != modCount)
-      throw new ConcurrentModificationException();
-    
-    return remove(idx) != null;
   }
 
   @SuppressWarnings("unchecked")

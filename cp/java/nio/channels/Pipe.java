@@ -6,8 +6,7 @@ import java.nio.channels.spi.SelectorProvider;
 
 public abstract class Pipe {
 
-  public abstract static class SinkChannel extends AbstractSelectableChannel
-  implements GatheringByteChannel {
+  public abstract static class SinkChannel extends AbstractSelectableChannel implements GatheringByteChannel {
 
     protected SinkChannel(final SelectorProvider newProvider) {
       super(newProvider);
@@ -19,8 +18,7 @@ public abstract class Pipe {
     }
   }
 
-  public abstract static class SourceChannel extends AbstractSelectableChannel
-  implements ScatteringByteChannel {
+  public abstract static class SourceChannel extends AbstractSelectableChannel implements ScatteringByteChannel {
 
     protected SourceChannel(final SelectorProvider newProvider) {
       super(newProvider);

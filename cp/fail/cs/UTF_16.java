@@ -82,6 +82,16 @@ public class UTF_16 extends Charset {
 
   @Override
   public boolean contains(final Charset cs) {
+    if (cs.getClass().equals(fail.cs.ASCII.class))
+      return true;
+    if (cs.getClass().equals(fail.cs.UTF_8.class))
+      return true;
+    if (cs.getClass().equals(fail.cs.UTF_16LE.class))
+      return true;
+    if (cs.getClass().equals(fail.cs.UTF_16BE.class))
+      return true;
+    if (cs.getClass().equals(fail.cs.ISO_8859_1.class))
+      return true;
     return false;
   }
 

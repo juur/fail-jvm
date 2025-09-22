@@ -5,9 +5,8 @@ import java.net.SocketAddress;
 import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.SelectorProvider;
 
-
 public abstract class SocketChannel extends AbstractSelectableChannel
-implements ByteChannel, ScatteringByteChannel, GatheringByteChannel {
+  implements ByteChannel, ScatteringByteChannel, GatheringByteChannel {
 
   protected SocketChannel(final SelectorProvider newProvider) {
     super(newProvider);

@@ -19,8 +19,7 @@ public final class Long extends Number implements Comparable<Long> {
     SIZE = 64;
   }
 
-  public static long parseLong(final String str)
-  {
+  public static long parseLong(final String str) {
     return parseLong(str, 10);
   }
 

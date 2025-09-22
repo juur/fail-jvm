@@ -2,7 +2,17 @@ package java.io;
 
 public class StringWriter extends Writer {
 
-  private StringBuffer sb;
+  final private StringBuffer sb;
+
+  public StringWriter() {
+    super();
+    sb = new StringBuffer();
+  }
+
+  public StringWriter(int initialSize) {
+    super();
+    sb = new StringBuffer(initialSize);
+  }
 
   @Override
   public void close() throws IOException {}
@@ -12,17 +22,15 @@ public class StringWriter extends Writer {
 
   @Override
   public String toString() {
-    return sb.toString();
+    return getBuffer().toString();
   }
 
   @Override
-  void write(final char[] cbuf, final int off, final int len) throws IOException {
-    sb.append(cbuf, off, len);
+  public void write(final char[] cbuf, final int off, final int len) throws IOException {
+    getBuffer().append(cbuf, off, len);
   }
 
-  @Override
-  void write(final String str, final int off, final int len) throws IOException {
-    sb.append(str, off, len);
+  public StringBuffer getBuffer() {
+    return sb;
   }
-
 }

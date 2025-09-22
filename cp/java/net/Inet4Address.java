@@ -1,10 +1,9 @@
 package java.net;
 
-
 public class Inet4Address extends InetAddress {
 
-  private final byte[] addr;
-  private final String hostAddress;
+  private final byte[]      addr;
+  private final String      hostAddress;
   private static final long serialVersionUID = 1L;
 
   Inet4Address(final byte[] newAddr) {

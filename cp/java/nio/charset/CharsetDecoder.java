@@ -12,7 +12,9 @@ public abstract class CharsetDecoder {
   private String            replacement;
   private CodingErrorAction unmappableCharacterAction;
 
-  protected CharsetDecoder(final Charset newCharset, final float newAverageCharsPerByte, final float newMaxCharsPerByte) {
+  protected CharsetDecoder(
+    final Charset newCharset, final float newAverageCharsPerByte, final float newMaxCharsPerByte
+  ) {
     this.cs = newCharset;
     this.averageCharsPerByte = newAverageCharsPerByte;
     this.maxCharsPerByte = newMaxCharsPerByte;

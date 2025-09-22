@@ -2,87 +2,14 @@ package java.util;
 
 public abstract class AbstractList<E> extends AbstractCollection<E> implements List<E> {
 
-  private static class ListViewImpl<E> extends AbstractList<E> {
-
-    private List<E> list;
-    private int from;
-    private int to;
-
-    ListViewImpl(List<E> nList, int nFrom, int nTo) {
-      list = nList;
-      from = nFrom;
-      to = nTo;
-    }
-    
-    @Override
-    public E get(int index) {
-      if (index > to || index < 0)
-        throw new IndexOutOfBoundsException();
-      return list.get(index + from);
-    }
-    
-    @Override
-    public E set(int index, E element) {
-      if (index > to || index < 0)
-        throw new IndexOutOfBoundsException();
-      return list.set(index + from, element);
-    }
-
-    @Override
-    public int size() {
-      return from - to;
-    }
-    
-  }
-  
-  private static class ListIteratorImpl<E> extends IteratorImpl<E> implements ListIterator<E> {
-
-    ListIteratorImpl(AbstractList<E> abstractList, int index) {
-      super(abstractList, index);
-    }
-
-    @Override
-    public void add(E e) {
-      list.add(e);
-    }
-
-    @Override
-    public boolean hasPrevious() {
-      return (pos > 0);
-    }
-
-    @Override
-    public int nextIndex() {
-      return Math.min(pos, list.size());
-    }
-
-    @Override
-    public E previous() {
-      if (hasPrevious())
-        return this.list.get(this.pos--);
-      return null;
-    }
-
-    @Override
-    public int previousIndex() {
-      return pos - 1;
-    }
-
-    @Override
-    public void set(E e) {
-      list.set(pos, e);
-    }
-    
-  }
-  
   private static class IteratorImpl<E> implements Iterator<E> {
 
     protected final AbstractList<E> list;
     protected int                   pos;
-    
-    IteratorImpl(final AbstractList<E> abstractList, int index) {
-      this.list = abstractList;
-      this.pos = index;
+
+    IteratorImpl(final AbstractList<E> abstractList, final int index) {
+      list = abstractList;
+      pos = index;
     }
 
     @Override
@@ -93,13 +20,86 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
     @Override
     public E next() {
       if (hasNext())
-        return this.list.get(this.pos++);
+        return list.get(pos++);
       return null;
     }
 
     @Override
     public void remove() {
-      this.list.remove(this.pos);
+      list.remove(pos);
+    }
+
+  }
+
+  private static class ListIteratorImpl<E> extends IteratorImpl<E> implements ListIterator<E> {
+
+    ListIteratorImpl(final AbstractList<E> abstractList, final int index) {
+      super(abstractList, index);
+    }
+
+    @Override
+    public void add(final E e) {
+      list.add(e);
+    }
+
+    @Override
+    public boolean hasPrevious() {
+      return pos > 0;
+    }
+
+    @Override
+    public int nextIndex() {
+      return Math.min(pos, list.size());
+    }
+
+    @Override
+    public E previous() {
+      if (hasPrevious())
+        return list.get(pos--);
+      return null;
+    }
+
+    @Override
+    public int previousIndex() {
+      return pos - 1;
+    }
+
+    @Override
+    public void set(final E e) {
+      list.set(pos, e);
+    }
+
+  }
+
+  private static class ListViewImpl<E> extends AbstractList<E> {
+
+    private final List<E> list;
+    private final int     from;
+    private final int     to;
+
+    ListViewImpl(final List<E> nList, final int nFrom, final int nTo) {
+      list = nList;
+      from = nFrom;
+      to = nTo;
+    }
+
+    @Override
+    public E get(final int index) {
+      if (index > to || index < 0)
+        throw new IndexOutOfBoundsException();
+      return list.get(index + from);
+    }
+
+    @Override
+    public E set(final int index, final E element) {
+      if (index > to || index < 0)
+        throw new IndexOutOfBoundsException();
+      return list.set(index + from, element);
+    }
+
+    @Override
+    public int size() {
+      return from - to;
     }
 
   }
@@ -122,16 +122,15 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
   }
 
   @Override
-  public boolean addAll(int index, Collection<? extends E> c) {
-    Iterator<? extends E> it = c.iterator();
+  public boolean addAll(final int index, final Collection<? extends E> c) {
+    final Iterator<? extends E> it = c.iterator();
     if (!it.hasNext())
       return false;
-    
+
     int safe = modCount;
-    int pos = index;
-    
-    while (it.hasNext())
-    {
+    int pos  = index;
+
+    while (it.hasNext()) {
       if (safe != modCount)
         throw new ConcurrentModificationException();
       add(pos++, it.next());
@@ -147,8 +146,8 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
 
   @Override
   public int indexOf(final Object o) {
-    final ListIterator<E> li = listIterator();
-    int safe = modCount;
+    final ListIterator<E> li   = listIterator();
+    final int             safe = modCount;
     while (li.hasNext()) {
       if (safe != modCount)
         throw new ConcurrentModificationException();
@@ -165,8 +164,8 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
 
   @Override
   public int lastIndexOf(final Object o) {
-    final ListIterator<E> li = listIterator(size());
-    int safe = modCount;
+    final ListIterator<E> li   = listIterator(size());
+    final int             safe = modCount;
     while (li.hasPrevious()) {
       if (safe != modCount)
         throw new ConcurrentModificationException();
@@ -180,9 +179,9 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
   public ListIterator<E> listIterator() {
     return listIterator(0);
   }
-  
+
   @Override
-  public ListIterator<E> listIterator(int index) {
+  public ListIterator<E> listIterator(final int index) {
     return new ListIteratorImpl<E>(this, index);
   }
 
@@ -191,24 +190,11 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
     throw new UnsupportedOperationException();
   }
 
-  protected void removeRange(final int fromIndex, final int toIndex) {
-    final ListIterator<E> li    = listIterator(fromIndex);
-    int                   count = toIndex - fromIndex;
-    int save = modCount;
-
-    while (count-- > 0) {
-      if (save != modCount)
-        throw new ConcurrentModificationException();
-      li.next();
-      li.remove();
-    }
-  }
-
   @Override
   public boolean retainAll(final Collection<?> c) {
-    boolean               mod = false;
-    final ListIterator<E> li  = listIterator();
-    int save = modCount;
+    boolean               mod  = false;
+    final ListIterator<E> li   = listIterator();
+    final int             save = modCount;
 
     while (li.hasNext()) {
       if (!c.contains(li.next())) {
@@ -228,6 +214,19 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
 
   @Override
   public List<E> subList(final int fromIndex, final int toIndex) {
-   return new ListViewImpl<E>(this, fromIndex, toIndex);
+    return new ListViewImpl<E>(this, fromIndex, toIndex);
+  }
+
+  protected void removeRange(final int fromIndex, final int toIndex) {
+    final ListIterator<E> li    = listIterator(fromIndex);
+    int                   count = toIndex - fromIndex;
+    final int             save  = modCount;
+
+    while (count-- > 0) {
+      if (save != modCount)
+        throw new ConcurrentModificationException();
+      li.next();
+      li.remove();
+    }
   }
 }

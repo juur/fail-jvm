@@ -31,10 +31,7 @@ public class Runtime {
     return exec(command, envp, null);
   }
 
-  public Process exec(final String command,
-    final String[] envp,
-    final File dir)
-      throws IOException {
+  public Process exec(final String command, final String[] envp, final File dir) throws IOException {
     return exec(command.split(" \t\n\r\f"), envp, dir);
   }
 

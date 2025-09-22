@@ -19,6 +19,10 @@ public abstract class ShortBuffer extends Buffer {
     return 0;
   }
 
+  public abstract short get();
+
+  public abstract short get(int index);
+
   @Override
   public boolean hasArray() {
     // TODO Auto-generated method stub
@@ -37,4 +41,7 @@ public abstract class ShortBuffer extends Buffer {
     return false;
   }
 
+  public abstract ShortBuffer put(int index, short s);
+
+  public abstract ShortBuffer put(short s);
 }

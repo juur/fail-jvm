@@ -23,13 +23,11 @@ public abstract class SelectableChannel extends AbstractInterruptibleChannel {
 
   public abstract SelectorProvider provider();
 
-  public final SelectionKey register(final Selector sel, final int ops)
-    throws ClosedChannelException {
+  public final SelectionKey register(final Selector sel, final int ops) throws ClosedChannelException {
     return register(sel, ops, null);
   }
 
-  public abstract SelectionKey register(Selector sel, int ops, Object att)
-    throws ClosedChannelException;
+  public abstract SelectionKey register(Selector sel, int ops, Object att) throws ClosedChannelException;
 
   public abstract int validOps();
 }

@@ -1,6 +1,5 @@
 package java.io;
 
-
 public interface DataInput {
 
   boolean readBoolean() throws IOException;

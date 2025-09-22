@@ -26,7 +26,6 @@ public class PrintStream extends FilterOutputStream implements Appendable {
     charset = Charset.forName(csn);
   }
 
-
   @Override
   public Appendable append(final char c) throws IOException {
     write(charset.encode(CharBuffer.wrap(new char[] { c })).array());
@@ -36,6 +35,8 @@ public class PrintStream extends FilterOutputStream implements Appendable {
 
   @Override
   public Appendable append(final CharSequence csq) throws IOException {
+    // String debugText = "PrintStream.append: " + csq.toString();
+    // fail.Debug.print(debugText.getBytes());
     write(charset.encode(CharBuffer.wrap(csq)).array());
     checkAutoFlush();
     return this;
@@ -157,7 +158,7 @@ public class PrintStream extends FilterOutputStream implements Appendable {
   }
 
   public PrintStream printf(final String format, final Object... args) {
-    return format(format, args);
+    return format(Locale.getDefault(), format, args);
   }
 
   public void println() {

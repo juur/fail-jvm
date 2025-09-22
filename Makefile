@@ -1,59 +1,63 @@
 CC			:=	gcc
+# Override this if you're running a non-RHEL derived version of Linux
+# e.g. under Ubuntu: make JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 JAVA_HOME	:=	/usr/lib/jvm/java-1.8.0
 CFLAGS		:=	\
-	-std=c99 \
-	-Og \
-	-no-pie \
-	-ggdb3 \
+	-std=c2x \
 	-Wall \
-	-Wextra \
-	-pedantic \
-	-Wno-unused-parameter \
-	-Wformat=2 \
-	-fsingle-precision-constant \
 	-Wbad-function-cast \
-	-Wfloat-equal -Winit-self \
+	-Wextra \
+	-Wfloat-equal \
+	-Winit-self \
+	-Wformat=2 \
 	-Wjump-misses-init \
 	-Wlogical-op \
 	-Wmissing-declarations \
+	-Wmissing-format-attribute \
+	-Wmissing-noreturn \
 	-Wmissing-prototypes \
 	-Wnested-externs \
+	-Wno-unused-function \
+	-Wno-unused-parameter \
 	-Wold-style-definition \
 	-Wpointer-arith \
 	-Wredundant-decls \
-	-Wstrict-prototypes \
 	-Wstrict-aliasing=3 \
-	-fstrict-aliasing \
 	-Wstrict-overflow=5 \
-	-fstack-protector-all \
-	-fstrict-overflow \
-	-D_FORTIFY_SOURCE=2 \
-	-Wsuggest-attribute=format \
-	-Wswitch-default \
-	-Wsuggest-attribute=pure \
+	-Wstrict-prototypes \
+	-Wsuggest-attribute=cold \
 	-Wsuggest-attribute=const \
+	-Wsuggest-attribute=format \
+	-Wsuggest-attribute=malloc \
 	-Wsuggest-attribute=noreturn \
+	-Wsuggest-attribute=pure \
+	-Wswitch-default \
 	-Wswitch-enum \
 	-Wunsuffixed-float-constants \
-	-Wno-unused-function \
-	-Wwrite-strings
+	-Wwrite-strings \
+	-fsingle-precision-constant \
+	-fstack-protector-all \
+	-fstrict-aliasing \
+	-fstrict-overflow \
+	-Og \
+	-D_FORTIFY_SOURCE=2 \
+	-ggdb3
 
-LDFLAGS		:= -lpthread -lm
+LDFLAGS		:=  -lpthread -lm
 JAVAC		:=	$(JAVA_HOME)/bin/javac
-JFLAGS		:=  -source 1.6 -target 1.6 -bootclasspath cp -classpath cp
+JVER		:=  1.7
+BOOTCPATH	:=  -bootclasspath
+JFLAGS		:=  -source $(JVER) -target $(JVER) $(BOOTCPATH) cp -classpath cp -Xlint:all
+JLFLAGS		:=  -source $(JVER) -target $(JVER) $(BOOTCPATH) cplite -classpath cplite -Xlint:all
 
 JCP_SRCS	:=	$(shell find cp -type f -name "*.java")
-
-VALGRIND	:=	valgrind
-VALFLAGS	:=	--leak-check=full \
-	--show-leak-kinds=all \
-	--read-var-info=yes \
-	--track-fds=yes \
-	--track-origins=yes
+JCPL_SRCS	:=  $(shell find cplite -type f -name "*.java")
 
 J_SRCS		:=	$(wildcard test/*.java)
-JCP_CLSS	:=	$(JCP_SRCS:.java=.class)
 J_CLSS		:=	$(J_SRCS:.java=.class)
+
+JCP_CLSS	:=	$(JCP_SRCS:.java=.class)
+JCPL_CLSS	:=	$(JCPL_SRCS:.java=.class)
 
 SRCS		:=	$(wildcard *.c)
 OBJS		:=	$(SRCS:.c=.o)
@@ -80,10 +84,10 @@ $(TARGET):	$(OBJS)
 	$(CC) -o $(TARGET) $(OBJS) $(LDFLAGS)
 
 %.o:	%.c
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
 count:
-		@cat *.c | sed -n -e '/*runCode/,$$p' | tr -s '[ \n\t]' | sed -e 's,^\t,,' | grep 'case 0x'
+		@cat *.c | sed -n -e '/*runCode/,$$p' | tr -s '[ \n\t]' | sed -e 's,^\t,,' | grep 'case 0x' | grep -v PARTIAL
 
 list:
 		@echo $(JCP_SRCS)
@@ -91,7 +95,7 @@ list:
 rt.jar:	$(JCP_CLSS)
 	jar cf rt.jar MANIFEST.MF -C cp/ .
 
-all:		$(TARGET) $(JCP_CLSS) $(J_CLSS) rt.jar
+all:		$(TARGET) $(JCP_CLSS) $(J_CLSS) $(JCPL_CLSS) rt.jar
 
 %.class: 	%.java
 	$(JAVAC) $(JFLAGS) $<
@@ -99,12 +103,15 @@ all:		$(TARGET) $(JCP_CLSS) $(J_CLSS) rt.jar
 dist-clean: clean
 	find cp -type f -name "*.class" -exec rm -f {} \;
 
+clean-tests:
+	rm -f test/*.class
+
 clean:
-	rm -f $(TARGET) *.o
+	rm -f $(TARGET) *.o test/*.class
 
 scan:
 	rm -f $(TARGET)
 	scan-build $(SCAN_FLAGS)
 
-.PHONY:	default clean all scan list
+.PHONY:	default clean all scan list dist-clean clean-tests
 

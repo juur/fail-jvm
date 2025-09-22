@@ -17,8 +17,8 @@ public final class Class<T> implements GenericDeclaration, Type, AnnotatedElemen
   private final Annotation[] declaredAnnotations;
   private final int          modifiers;
   private Class<? super T>   superClass;
-  boolean                    isArray, isPrimitive, isInterface;
-  String                     simpleName, canonicalName, name;
+  boolean                    isArray, isPrimitive, isInterface, desiredAssertionStatus;
+  String                     simpleName, canonicalName, name, packageName;
   private final ClassLoader  classLoader;
   private T[]                enumConstants;
 
@@ -30,6 +30,7 @@ public final class Class<T> implements GenericDeclaration, Type, AnnotatedElemen
     annotations = null;
     declaredAnnotations = null;
     componentType = null;
+    desiredAssertionStatus = true;
     isInterface = false;
     modifiers = 0;
     classLoader = ClassLoader.getSystemClassLoader();
@@ -54,6 +55,10 @@ public final class Class<T> implements GenericDeclaration, Type, AnnotatedElemen
       if (a.getClass().isInstance(annotationClass))
         return (TT) a;
     return null;
+  }
+
+  public boolean desiredAssertionStatus() {
+    return desiredAssertionStatus;
   }
 
   @Override
@@ -123,6 +128,10 @@ public final class Class<T> implements GenericDeclaration, Type, AnnotatedElemen
     return simpleName;
   }
 
+  public String getPackageName() {
+    return packageName;
+  }
+
   public Class<? super T> getSuperClass() {
     return this.superClass;
   }
@@ -167,6 +176,8 @@ public final class Class<T> implements GenericDeclaration, Type, AnnotatedElemen
 
   @Override
   public String toString() {
+    // return getName();
+    // broken
     return (isPrimitive() ? "" : isInterface() ? "interface " : "class ") + getName();
   }
 

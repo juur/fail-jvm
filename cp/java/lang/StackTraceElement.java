@@ -8,7 +8,9 @@ public class StackTraceElement {
   final private int     lineNumber;
   final private String  methodName;
 
-  public StackTraceElement(final String newDeclaringClass, final String newMethodName, final String newFileName, final int newLineNumber) {
+  public StackTraceElement(
+    final String newDeclaringClass, final String newMethodName, final String newFileName, final int newLineNumber
+  ) {
     this.declaringClass = newDeclaringClass;
     this.methodName = newMethodName;
     this.fileName = newFileName;

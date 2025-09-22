@@ -52,17 +52,17 @@ public abstract class Number {
 
   protected static char[] itoa(final long value, final int radix) {
     final char[] tmp = new char[64];
-    final char[] ret = new char[tmp.length+1];
+    final char[] ret = new char[tmp.length + 1];
 
     int  tp = 0, sp = 0;
     long i  = 0, v = 0;
 
     final boolean sign = radix == 10 && value < 0;
 
-    //if (sign)
-    //  v = -value;
-    //else
-      v = value;
+    // if (sign)
+    // v = -value;
+    // else
+    v = value;
 
     while (v != 0 || tp == 0) {
       i = Math.abs(v % radix);

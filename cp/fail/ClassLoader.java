@@ -2,9 +2,7 @@ package fail;
 
 public class ClassLoader extends java.lang.ClassLoader {
 
-  public ClassLoader()
-  {
-  }
+  public ClassLoader() {}
 
   @Override
   public String toString() {
@@ -12,17 +10,17 @@ public class ClassLoader extends java.lang.ClassLoader {
   }
 
   protected Class<?> loadClass(final String name, final boolean resolve) throws ClassNotFoundException {
-  Class<?> ret;
+    Class<?> ret;
 
-  if ((ret = findLoadedClass(name)) != null)
-    ;
-  else
-    ret = findClass(name);
+    if ((ret = findLoadedClass(name)) != null)
+      ;
+    else
+      ret = findClass(name);
 
-  if (ret == null)
-    return null;
-  if (resolve)
-    resolveClass(ret);
-  return ret;
-}
+    if (ret == null)
+      return null;
+    if (resolve)
+      resolveClass(ret);
+    return ret;
+  }
 }

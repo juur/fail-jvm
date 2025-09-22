@@ -48,7 +48,7 @@ public abstract class AbstractCollection<E> implements Collection<E> {
   }
 
   @Override
-  public boolean isEmtpy() {
+  public boolean isEmpty() {
     return size() == 0;
   }
 
@@ -58,10 +58,9 @@ public abstract class AbstractCollection<E> implements Collection<E> {
   @Override
   public boolean remove(final Object o) {
     final Iterator<E> it = iterator();
-    while (it.hasNext())
-    {
+    while (it.hasNext()) {
       final Object tmp = it.next();
-      if(tmp.equals(o)) {
+      if (tmp.equals(o)) {
         it.remove();
         return true;
       }

@@ -14,6 +14,7 @@ import fail.CaseInsensitiveOrder;
 public final class String implements Serializable, CharSequence, Comparable<String> {
 
   public static final Comparator<String> CASE_INSENSITIVE_ORDER;
+  private static final long serialVersionUID = 50240865633638L;
 
   static {
     CASE_INSENSITIVE_ORDER = new CaseInsensitiveOrder();
@@ -63,7 +64,11 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
     return o.toString();
   }
 
-  private final char[] string;
+  private final char[] value;
+
+  public String() {
+    value = new char[0];
+  }
 
   public String(final byte[] bytes) {
     this(bytes, Charset.defaultCharset());
@@ -71,14 +76,14 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
 
   public String(final byte[] bytes, final Charset charset) {
     try {
-      string = charset.decode(ByteBuffer.wrap(bytes)).array();
+      value = charset.decode(ByteBuffer.wrap(bytes)).array();
     } catch (final CharacterCodingException e) {
       throw new Error(e);
     }
   }
 
   public String(final char[] s) {
-    string = s;
+    value = s;
   }
 
   public String(final String s) {
@@ -87,7 +92,7 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
 
   @Override
   public char charAt(final int index) {
-    return string[index];
+    return value[index];
   }
 
   public int codePointAt(final int i) {
@@ -100,7 +105,7 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
     if (length() != o.length())
       return length() - o.length();
     for (int i = 0; i < length(); i++)
-      if (string[i] != o.string[i])
+      if (value[i] != o.value[i])
         return -1;
     return 0;
   }
@@ -129,7 +134,7 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
       return false;
     }
     final String other = (String) obj;
-    if (!Arrays.equals(string, other.string)) {
+    if (!Arrays.equals(value, other.value)) {
       return false;
     }
     return true;
@@ -141,7 +146,7 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
     if (length() == 0)
       return true;
     for (int i = 0; i < s.length(); i++)
-      if (Character.toLowerCase(string[i]) != Character.toLowerCase(s.string[i]))
+      if (Character.toLowerCase(value[i]) != Character.toLowerCase(s.value[i]))
         return false;
     return true;
   }
@@ -149,14 +154,14 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
   public byte[] getBytes() {
     final byte[] ret = new byte[length()];
     for (int i = 0; i < length(); i++)
-      ret[i] = (byte) string[i];
+      ret[i] = (byte) value[i];
     return ret;
   }
 
   @Override
   public int hashCode() {
     int hc = 31;
-    for (final char c : string)
+    for (final char c : value)
       hc += c;
     return hc;
   }
@@ -167,7 +172,7 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
 
   public int indexOf(final int ch, final int fromIndex) {
     for (int i = fromIndex; i < length(); i++)
-      if (string[i] == ch)
+      if (value[i] == ch)
         return i;
     return -1;
   }
@@ -182,19 +187,19 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
   }
 
   public int lastIndexOf(final int ch) {
-    return lastIndexOf(ch, string.length - 1);
+    return lastIndexOf(ch, value.length - 1);
   }
 
   public int lastIndexOf(final int ch, final int fromIndex) {
     for (int i = fromIndex; i >= 0; i--)
-      if (string[i] == ch)
+      if (value[i] == ch)
         return i;
     return -1;
   }
 
   @Override
   public int length() {
-    return string.length;
+    return value.length;
   }
 
   public boolean matches(final String regex) {
@@ -202,7 +207,7 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
   }
 
   public String replace(final char oldChar, final char newChar) {
-    final char newstr[] = Arrays.copyOf(string, string.length);
+    final char newstr[] = Arrays.copyOf(value, value.length);
     for (int i = 0; i < newstr.length; i++)
       if (newstr[i] == oldChar)
         newstr[i] = newChar;
@@ -239,7 +244,7 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
       return false;
 
     for (int i = 0; i < length; i++)
-      if (string[i] != other.string[i])
+      if (value[i] != other.value[i])
         return false;
     return true;
   }
@@ -257,12 +262,12 @@ public final class String implements Serializable, CharSequence, Comparable<Stri
     final char[] ret = new char[end - start];
     int          i   = 0;
     for (int j = start; j < end; j++)
-      ret[i++] = string[j];
+      ret[i++] = value[j];
     return new String(ret);
   }
 
   public char[] toCharArray() {
-    return Arrays.copyOf(string, string.length);
+    return Arrays.copyOf(value, value.length);
   }
 
   public String toLowerCase() {

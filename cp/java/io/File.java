@@ -10,10 +10,10 @@ public class File implements Serializable, Comparable<File> {
   private static final long serialVersionUID = 1L;
 
   private final String pathname;
-  private boolean isFile, isDirectory, isHidden;
-  private boolean canExecute, canRead, canWrite;
+  private boolean      isFile, isDirectory, isHidden;
+  private boolean      canExecute, canRead, canWrite;
 
-  long            lastModified, length;
+  long lastModified, length;
 
   public File(final File parent, final String child) {
     this(parent + separator + child);

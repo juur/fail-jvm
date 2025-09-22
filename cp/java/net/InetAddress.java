@@ -7,33 +7,24 @@ import java.nio.ByteOrder;
 public class InetAddress implements Serializable {
 
   private static final long serialVersionUID = 1L;
-  
-  public static InetAddress[] getAllByName(final String host)
-    throws UnknownHostException
-  {
+
+  public static InetAddress[] getAllByName(final String host) throws UnknownHostException {
     return null;
   }
 
-  public static InetAddress getByAddress(final byte[] addr)
-    throws UnknownHostException
-  {
+  public static InetAddress getByAddress(final byte[] addr) throws UnknownHostException {
     return null;
   }
 
-  public static InetAddress getByAddress(final String host,
-    final byte[] addr)
-      throws UnknownHostException {
+  public static InetAddress getByAddress(final String host, final byte[] addr) throws UnknownHostException {
     return null;
   }
 
-  public static InetAddress getByName(final String host)
-    throws UnknownHostException {
+  public static InetAddress getByName(final String host) throws UnknownHostException {
     return null;
   }
 
-  public static InetAddress getLocalHost()
-    throws UnknownHostException
-  {
+  public static InetAddress getLocalHost() throws UnknownHostException {
     return null;
   }
 
@@ -100,8 +91,7 @@ public class InetAddress implements Serializable {
     return true;
   }
 
-  public boolean isReachable(final NetworkInterface netif, final int ttl, final int timeout)
-    throws IOException {
+  public boolean isReachable(final NetworkInterface netif, final int ttl, final int timeout) throws IOException {
     return true;
   }
 

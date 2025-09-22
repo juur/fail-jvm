@@ -23,16 +23,16 @@ public final class FileDescriptor {
     fd = i;
   }
 
-  void close() throws IOException {
+  public void close() throws IOException {
     if (fd == -1)
-      throw new RuntimeException();
+      throw new IOException("invalid FileDescriptor (-1)");
     sysClose(fd);
     fd = -1;
   }
 
-  void open(final boolean b) throws FileNotFoundException, IOException {
+  public void open(final boolean b) throws FileNotFoundException, IOException {
     if (file == null || fd != -1)
-      throw new RuntimeException();
+      throw new IOException("file or fd invalid");
     fd = sysOpen(file.toString(), b);
   }
 
@@ -40,8 +40,7 @@ public final class FileDescriptor {
 
   private native void sysClose(int fdesc) throws IOException;
 
-  private native int sysOpen(String path, boolean isWrite)
-    throws IOException, FileNotFoundException;
+  private native int sysOpen(String path, boolean isWrite) throws IOException, FileNotFoundException;
 
   public native boolean valid();
 }

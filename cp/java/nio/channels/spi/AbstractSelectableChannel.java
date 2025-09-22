@@ -21,8 +21,7 @@ public abstract class AbstractSelectableChannel extends SelectableChannel {
   }
 
   @Override
-  public final Object blockingLock()
-  {
+  public final Object blockingLock() {
     return blockingObj;
   }
 
@@ -43,8 +42,7 @@ public abstract class AbstractSelectableChannel extends SelectableChannel {
 
   protected abstract void implCloseSelectableChannel() throws IOException;
 
-  protected abstract void implConfigureBlocking(boolean block)
-    throws IOException;
+  protected abstract void implConfigureBlocking(boolean block) throws IOException;
 
   @Override
   public final boolean isBlocking() {

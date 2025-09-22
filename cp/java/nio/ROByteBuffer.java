@@ -7,7 +7,7 @@ final class ROByteBuffer extends ByteBuffer {
   }
 
   ROByteBuffer(final int size) {
-    super(size, true, 0, new byte[size]);
+    super(size, true, 0, null);
   }
 
   @Override
@@ -248,14 +248,14 @@ final class ROByteBuffer extends ByteBuffer {
   }
 
   @Override
-  public ByteBuffer putLong(final long value) {
+  public ByteBuffer putLong(final int index, final long value) {
     throw new ReadOnlyBufferException();
-
   }
 
   @Override
-  public ByteBuffer putLong(final long index, final int value) {
+  public ByteBuffer putLong(final long value) {
     throw new ReadOnlyBufferException();
+
   }
 
   @Override

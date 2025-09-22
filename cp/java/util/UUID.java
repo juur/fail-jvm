@@ -5,7 +5,7 @@ import java.io.Serializable;
 public final class UUID implements Serializable, Comparable<UUID> {
 
   private static final long serialVersionUID = 1L;
-  
+
   /* msb */
   private static final long TIME_LOW_MASK = 0xFFFFFFFF00000000L;
   private static final long TIME_MID_MASK = 0x00000000FFFF0000L;
@@ -21,7 +21,7 @@ public final class UUID implements Serializable, Comparable<UUID> {
     if (name == null || name.length() != 36)
       throw new IllegalArgumentException();
 
-    //System.out.println("name      = "+name);
+    // System.out.println("name = "+name);
 
     final String time_lowStr              = name.substring(0, 8);
     final String time_midStr              = name.substring(9, 13);
@@ -29,11 +29,11 @@ public final class UUID implements Serializable, Comparable<UUID> {
     final String variant_and_sequenceStr  = name.substring(19, 23);
     final String nodeStr                  = name.substring(24, 36);
 
-    //System.out.println("time_low  = "+time_lowStr);
-    //System.out.println("time_mid  = "+time_midStr);
-    //System.out.println("time_high = "+time_high_and_versionStr);
-    //System.out.println("variant   = "+variant_and_sequenceStr);
-    //System.out.println("node      = "+nodeStr);
+    // System.out.println("time_low = "+time_lowStr);
+    // System.out.println("time_mid = "+time_midStr);
+    // System.out.println("time_high = "+time_high_and_versionStr);
+    // System.out.println("variant = "+variant_and_sequenceStr);
+    // System.out.println("node = "+nodeStr);
 
     final long node                  = Long.parseLong(nodeStr.toString(), 16);
     final long variant_and_sequence  = Long.parseLong(variant_and_sequenceStr.toString(), 16);
@@ -41,11 +41,11 @@ public final class UUID implements Serializable, Comparable<UUID> {
     final long time_mid              = Long.parseLong(time_midStr.toString(), 16);
     final long time_low              = Long.parseLong(time_lowStr.toString(), 16);
 
-    //System.out.println("time_low  = " + time_low);
-    //System.out.println("time_mid  = " + time_mid);
-    //System.out.println("time_high = " + time_high_and_version);
-    //System.out.println("variant   = " + variant_and_sequence);
-    //System.out.println("node      = " + node);
+    // System.out.println("time_low = " + time_low);
+    // System.out.println("time_mid = " + time_mid);
+    // System.out.println("time_high = " + time_high_and_version);
+    // System.out.println("variant = " + variant_and_sequence);
+    // System.out.println("node = " + node);
 
     long lsb = node & NODE_MASK;
     lsb += (variant_and_sequence & ((VARIANT_MASK + CLOCK_SEQ_MASK) >> 48)) << 48;
@@ -98,7 +98,7 @@ public final class UUID implements Serializable, Comparable<UUID> {
   }
 
   public long clockSequence() {
-    if ( version != 1 )
+    if (version != 1)
       throw new UnsupportedOperationException();
     return clockSeq;
   }
@@ -117,13 +117,13 @@ public final class UUID implements Serializable, Comparable<UUID> {
   }
 
   public long node() {
-    if ( version != 1 )
+    if (version != 1)
       throw new UnsupportedOperationException();
     return node;
   }
 
   public long timestamp() {
-    if ( version != 1 )
+    if (version != 1)
       throw new UnsupportedOperationException();
     return time;
   }

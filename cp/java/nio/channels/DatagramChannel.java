@@ -7,7 +7,7 @@ import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.SelectorProvider;
 
 public abstract class DatagramChannel extends AbstractSelectableChannel
-implements ByteChannel, ScatteringByteChannel, GatheringByteChannel {
+  implements ByteChannel, ScatteringByteChannel, GatheringByteChannel {
 
   protected DatagramChannel(final SelectorProvider newProvider) {
     super(newProvider);

@@ -12,7 +12,7 @@ public final class Pattern implements Serializable {
   public static final int MULTILINE        = 8;
   public static final int UNICODE_CASE     = 64;
   public static final int UNIX_LINES       = 1;
-  
+
   private static final long serialVersionUID = 1L;
 
   public static Pattern compile(final String regex) {
@@ -24,11 +24,11 @@ public final class Pattern implements Serializable {
   }
 
   public static boolean matches(final String regex, final CharSequence input) {
-    return false;
+    return Pattern.compile(regex).matcher(input).matches();
   }
 
   public static String quote(final String s) {
-    return "";
+    return "\\Q" + s + "\\E";
   }
 
   private final String origRegex;

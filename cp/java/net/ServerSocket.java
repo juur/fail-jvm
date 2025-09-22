@@ -27,8 +27,7 @@ public class ServerSocket {
     this(port, backlog, null);
   }
 
-  public ServerSocket(final int port, final int backlog, final InetAddress bindAddr)
-    throws IOException {
+  public ServerSocket(final int port, final int backlog, final InetAddress bindAddr) throws IOException {
     throw new IOException();
   }
 

@@ -2,36 +2,6 @@ package java.util;
 
 public class HashMap<K, V> extends AbstractMap<K, V> {
 
-  static class ImplEntry<KK, VV> implements Map.Entry<KK, VV> {
-
-    private final KK          key;
-    private ImplEntry<KK, VV> next;
-
-    private VV value;
-
-    public ImplEntry(final KK newKey, final VV newValue, final ImplEntry<KK, VV> newNext) {
-      key = newKey;
-      value = newValue;
-      next = newNext;
-    }
-
-    @Override
-    public KK getKey() {
-      return key;
-    }
-
-    @Override
-    public VV getValue() {
-      return value;
-    }
-
-    @Override
-    public VV setValue(final VV newValue) {
-      value = newValue;
-      return value;
-    }
-  }
-
   final private ImplEntry<?, ?>[] buckets;
   private int                     size;
 
@@ -44,15 +14,33 @@ public class HashMap<K, V> extends AbstractMap<K, V> {
   }
 
   public HashMap(final int initialCapacity, final float loadFactor) {
-    this.buckets = new ImplEntry<?, ?>[initialCapacity];
+    buckets = new ImplEntry<?, ?>[Math.max(11, Math.min(20, initialCapacity))];
   }
 
   public HashMap(final Map<? extends K, ? extends V> t) {
     this(t.size(), 0.75f);
+    for (final K o : t.keySet())
+      put(o, t.get(o));
   }
 
   @Override
-  public Set<Entry<K, V>> entrySet() {
+  public void clear() {
+    for (int i = 0; i < buckets.length; i++)
+      buckets[i] = null;
+  }
+
+  @Override
+  public boolean containsKey(final Object key) {
+    return keySet().contains(key);
+  }
+
+  @Override
+  public boolean containsValue(final Object value) {
+    return get(value) != null;
+  }
+
+  @Override
+  public Set<Map.Entry<K, V>> entrySet() {
     final HashSet<Entry<K, V>> hs    = new HashSet<Entry<K, V>>();
     final ImplEntry<?, ?>      tab[] = buckets;
 
@@ -70,7 +58,7 @@ public class HashMap<K, V> extends AbstractMap<K, V> {
 
   @Override
   public V get(final Object key) {
-    final int             bucket = key.hashCode() % buckets.length;
+    final int             bucket = Math.abs(key.hashCode()) % buckets.length;
     final ImplEntry<?, ?> tab[]  = buckets;
 
     @SuppressWarnings("unchecked")
@@ -86,12 +74,42 @@ public class HashMap<K, V> extends AbstractMap<K, V> {
     return null;
   }
 
+  @Override
+  public boolean isEmpty() {
+    for (final ImplEntry<?, ?> bucket : buckets)
+      if (bucket != null)
+        return false;
+    return true;
+  }
+
+  @Override
+  public Set<K> keySet() {
+    final HashSet<K>      hs    = new HashSet<K>();
+    final ImplEntry<?, ?> tab[] = buckets;
+    for (final ImplEntry<?, ?> b : tab) {
+      @SuppressWarnings("unchecked")
+      ImplEntry<K, V> head = (ImplEntry<K, V>) b;
+      while (head != null) {
+        hs.add(head.key);
+        head = head.next;
+      }
+    }
+
+    return hs;
+  }
 
   @Override
   public V put(final K key, final V value) {
-    final ImplEntry<K, V> entry  = new ImplEntry<K, V>(key, value, null);
-    final int             bucket = key.hashCode() % buckets.length;
+    if (key == null)
+      throw new NullPointerException("key is null");
+
+    final ImplEntry<K, V> entry = new ImplEntry<K, V>(key, value, null);
+
+    if (buckets == null)
+      throw new NullPointerException("buckets is null");
+
     final ImplEntry<?, ?> tab[]  = buckets;
+    final int             bucket = Math.abs(key.hashCode()) % buckets.length;
 
     @SuppressWarnings("unchecked")
     ImplEntry<K, V> head = (ImplEntry<K, V>) tab[bucket];
@@ -116,5 +134,53 @@ public class HashMap<K, V> extends AbstractMap<K, V> {
       }
     }
     return value;
+  }
+
+  @Override
+  public V remove(final Object key) {
+    final ImplEntry<?, ?> tab[]  = buckets;
+    final int             bucket = Math.abs(key.hashCode()) % buckets.length;
+
+    @SuppressWarnings("unchecked")
+    ImplEntry<K, V> head = (ImplEntry<K, V>) tab[bucket];
+    ImplEntry<K, V> prev = null;
+
+    if (head == null)
+      return null;
+
+    while (head != null) {
+      if (head.getKey().equals(key)) {
+        if (prev == null)
+          tab[bucket] = head.next;
+        else
+          prev.next = head.next;
+        return head.getValue();
+      }
+      prev = head;
+      head = head.next;
+    }
+
+    return null;
+  }
+
+  @Override
+  public int size() {
+    int ret = 0;
+    for (final ImplEntry<?, ?> bucket : buckets) {
+      @SuppressWarnings("unchecked")
+      ImplEntry<K, V> head = (ImplEntry<K, V>) bucket;
+
+      while (head != null) {
+        ret++;
+        head = head.next;
+      }
+    }
+
+    return ret;
+  }
+
+  @Override
+  protected Object clone() throws CloneNotSupportedException {
+    return new HashMap<K, V>(this);
   }
 }

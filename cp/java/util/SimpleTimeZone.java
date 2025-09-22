@@ -31,27 +31,26 @@ public class SimpleTimeZone extends TimeZone {
     final int newRawOffset, final String ID, final int newStartMonth, final int newStartDay,
     final int newStartDayOfWeek, final int newStartTime, final int newEndMonth, final int newEndDay,
     final int newEndDayOfWeek, final int newEndTime
-    ) {
-    this(newRawOffset, ID, newStartMonth, newStartDay, newStartDayOfWeek, newStartTime,
-      SimpleTimeZone.WALL_TIME, newEndMonth, newEndDay, newEndDayOfWeek, newEndTime,
-      SimpleTimeZone.WALL_TIME, 3600000);
+  ) {
+    this(newRawOffset, ID, newStartMonth, newStartDay, newStartDayOfWeek, newStartTime, SimpleTimeZone.WALL_TIME,
+      newEndMonth, newEndDay, newEndDayOfWeek, newEndTime, SimpleTimeZone.WALL_TIME, 3600000);
   }
 
   public SimpleTimeZone(
     final int newRawOffset, final String ID, final int newStartMonth, final int newStartDay,
     final int newStartDayOfWeek, final int newStartTime, final int newEndMonth, final int newEndDay,
     final int newEndDayOfWeek, final int newEndTime, final int newDstSavings
-    ) {
+  ) {
     this(newRawOffset, ID, newStartMonth, newStartDay, newStartDayOfWeek, newStartTime, SimpleTimeZone.WALL_TIME,
       newEndMonth, newEndDay, newEndDayOfWeek, newEndTime, SimpleTimeZone.WALL_TIME, newDstSavings);
   }
 
   public SimpleTimeZone(
     final int newRawOffset, final String ID, final int newStartMonth, final int newStartDay,
-    final int newStartDayOfWeek, final int newStartTime, final int newStartTimeMode,
-    final int newEndMonth1, final int newEndDay, final int newEndDayOfWeek, final int newEndTime,
-    final int newEndTimeMode, final int newDstSavings
-    ) {
+    final int newStartDayOfWeek, final int newStartTime, final int newStartTimeMode, final int newEndMonth1,
+    final int newEndDay, final int newEndDayOfWeek, final int newEndTime, final int newEndTimeMode,
+    final int newDstSavings
+  ) {
     if (newStartTimeMode < WALL_TIME || newStartTimeMode > UTC_TIME || newEndTimeMode < WALL_TIME
       || newEndTimeMode > UTC_TIME)
       throw new IllegalArgumentException("Invalid time mode");
@@ -68,8 +67,8 @@ public class SimpleTimeZone extends TimeZone {
   @Override
   protected Object clone() {
     System.out.println("clone()");
-    return new SimpleTimeZone(getRawOffset(), getID(), startMonth, startDay, startDayOfWeek,
-      startTime, endMonth, endDay, endDayOfWeek, endTime);
+    return new SimpleTimeZone(getRawOffset(), getID(), startMonth, startDay, startDayOfWeek, startTime, endMonth,
+      endDay, endDayOfWeek, endTime);
   }
 
   @Override
@@ -85,7 +84,7 @@ public class SimpleTimeZone extends TimeZone {
     final int day,
     final int dayOfWeek,
     final int milliseconds
-    ) {
+  ) {
     // FIXME
     return getRawOffset();
   }
@@ -121,12 +120,7 @@ public class SimpleTimeZone extends TimeZone {
     setEndRule(newEndMonth, newEndDay, 0, newEndTime);
   }
 
-  public void setEndRule(
-    final int newEndMonth,
-    final int newEndDay,
-    final int newEndDayOfWeek,
-    final int newEndTime
-    ) {
+  public void setEndRule(final int newEndMonth, final int newEndDay, final int newEndDayOfWeek, final int newEndTime) {
     if (newEndMonth < Calendar.JANUARY || newEndMonth > Calendar.DECEMBER)
       throw new IllegalArgumentException("Invalid month");
     if (newEndDayOfWeek != 0 && (newEndDayOfWeek < -Calendar.SUNDAY || newEndDayOfWeek > -Calendar.SATURDAY)
@@ -145,7 +139,7 @@ public class SimpleTimeZone extends TimeZone {
     final int newEndDayOfWeek,
     final int newEndTime,
     final boolean after
-    ) {
+  ) {
     // TODO
   }
 
@@ -163,11 +157,10 @@ public class SimpleTimeZone extends TimeZone {
     final int newStartDay,
     final int newStartDayOfWeek,
     final int newStartTime
-    ) {
+  ) {
     if (newStartMonth < Calendar.JANUARY || newStartMonth > Calendar.DECEMBER)
       throw new IllegalArgumentException("Invalid month");
-    if (newStartDayOfWeek != 0
-      && (newStartDayOfWeek < -Calendar.SUNDAY || newStartDayOfWeek > -Calendar.SATURDAY)
+    if (newStartDayOfWeek != 0 && (newStartDayOfWeek < -Calendar.SUNDAY || newStartDayOfWeek > -Calendar.SATURDAY)
       && (newStartDayOfWeek < -Calendar.SUNDAY || newStartDayOfWeek > -Calendar.SATURDAY))
       throw new IllegalArgumentException("Invalid day of week");
     startMonth = newStartMonth;
@@ -183,7 +176,7 @@ public class SimpleTimeZone extends TimeZone {
     final int newStartDayOfWeek,
     final int newStartTime,
     final boolean after
-    ) {
+  ) {
     // TODO
   }
 

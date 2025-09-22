@@ -5,8 +5,8 @@ import java.util.Random;
 public final class Math {
 
   public static final double E, PI;
-  private static Object rndObject = new Object();
-  private static Random rnd;
+  private static Object      rndObject = new Object();
+  private static Random      rnd;
 
   static {
     E = 2.718281828459045;
@@ -45,59 +45,71 @@ public final class Math {
     return a < b ? a : b;
   }
 
-  public static double abs(double a)
-  {
-	  if (a < 0) return -a;
-	  return a;
+  public static double abs(double a) {
+    if (a < 0)
+      return -a;
+    return a;
   }
 
-  public static float abs(float a)
-  {
-	  if (a < 0) return -a;
-	  return a;
+  public static float abs(float a) {
+    if (a < 0)
+      return -a;
+    return a;
   }
 
-  public static int abs(int a)
-  {
-	  if (a < 0) return -a;
-	  return a;
+  public static int abs(int a) {
+    if (a < 0)
+      return -a;
+    return a;
   }
-  
+
   public static double random() {
-    synchronized(rndObject) {
+    synchronized (rndObject) {
       if (rnd == null)
         rnd = new Random();
-      
+
       return rnd.nextDouble();
     }
   }
 
-  public static long abs(long a)
-  {
-	  if (a < 0) return -a;
-	  return a;
+  public static long abs(long a) {
+    if (a < 0)
+      return -a;
+    return a;
   }
-  
-  public static double expm(double x)
-  {
-	  return exp(x) - 1;
+
+  public static double expm(double x) {
+    return exp(x) - 1;
   }
 
   public static native double atan2(double y, double x);
+
   public static native double hypot(double y, double x);
+
   public static native double acos(double a);
+
   public static native double asin(double a);
+
   public static native double atan(double a);
+
   public static native double atan2(double a);
+
   public static native double cos(double a);
+
   public static native double cosh(double a);
+
   public static native double sin(double a);
+
   public static native double sinh(double a);
+
   public static native double exp(double a);
+
   public static native double log(double a);
+
   public static native double log10(double a);
+
   public static native double log1p(double x);
-  
+
   private Math() {}
 
   public static native double sqrt(double d);

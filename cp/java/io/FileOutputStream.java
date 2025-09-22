@@ -1,13 +1,13 @@
 package java.io;
 
-import java.nio.ImplFileChannel;
 import java.nio.channels.FileChannel;
+import java.nio.channels.ImplFileChannel;
 
 public class FileOutputStream extends OutputStream {
 
-  private final FileDescriptor fdObj;
-  private boolean              isClosed;
-  private final FileChannel    fc;
+  private final FileDescriptor  fdObj;
+  private boolean               isClosed;
+  private final ImplFileChannel fc;
 
   public FileOutputStream(final File file) throws FileNotFoundException, IOException {
     this(file, true);
@@ -49,9 +49,16 @@ public class FileOutputStream extends OutputStream {
   }
 
   @Override
-  native public void write(final byte[] b) throws IOException;
+  public native void write(final byte[] b)
+    throws IOException;/*
+                        * { String debugText = "FileOutputStream.write: ";
+                        * fail.Debug.print(debugText.getBytes()); fail.Debug.print(new
+                        * String(b).getBytes()); fc.write(ByteBuffer.wrap(b)); }
+                        */
 
   @Override
-  native public void write(int b) throws IOException;
+  public native void write(final int b) throws IOException;/*
+                                                            * { fc.write(ByteBuffer.allocate(4).putInt(b)); }
+                                                            */
 
 }

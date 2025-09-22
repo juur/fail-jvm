@@ -57,11 +57,7 @@ public abstract class SocketImpl implements SocketOptions {
 
   protected abstract void sendUrgentData(int data) throws IOException;
 
-  protected void setPerformancePreferences(
-    final int connectionTime,
-    final int latency,
-    final int bandwidth
-    ) {
+  protected void setPerformancePreferences(final int connectionTime, final int latency, final int bandwidth) {
 
   }
 

@@ -46,10 +46,13 @@ public class Throwable {
   }
 
   public void printStackTrace() {
-    printStraceTrace(System.err);
+    printStackTrace(System.err);
   }
 
-  public void printStraceTrace(final PrintStream s) {
+  public void printStackTrace(final PrintStream s) {
+    if (s == null)
+      throw new NullPointerException("PrintStream is null");
+
     s.print(getClass().getSimpleName() + ": ");
 
     if (getMessage() != null)
@@ -65,7 +68,7 @@ public class Throwable {
 
     if (getCause() != null) {
       s.print("Caused by: ");
-      getCause().printStraceTrace(s);
+      getCause().printStackTrace(s);
     }
   }
 

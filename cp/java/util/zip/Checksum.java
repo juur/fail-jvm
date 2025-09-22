@@ -1,6 +1,5 @@
 package java.util.zip;
 
-
 public interface Checksum {
 
   long getValue();

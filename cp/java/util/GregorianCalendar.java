@@ -24,11 +24,15 @@ public class GregorianCalendar extends Calendar {
     this(year, month, dayOfMonth, 0, 0, 0);
   }
 
-  public GregorianCalendar(final int year, final int month, final int dayOfMonth, final int hourOfDay, final int minute) {
+  public GregorianCalendar(
+    final int year, final int month, final int dayOfMonth, final int hourOfDay, final int minute
+  ) {
     this(year, month, dayOfMonth, hourOfDay, minute, 0);
   }
 
-  public GregorianCalendar(final int year, final int month, final int dayOfMonth, final int hourOfDay, final int minute, final int second) {
+  public GregorianCalendar(
+    final int year, final int month, final int dayOfMonth, final int hourOfDay, final int minute, final int second
+  ) {
     this();
     set(YEAR, year);
     set(DAY_OF_MONTH, dayOfMonth);
@@ -71,9 +75,9 @@ public class GregorianCalendar extends Calendar {
 
   @Override
   protected void computeFields() {
-    final int   days      = (int) (time / (24 * 60 * 60 * 1000));
+    final int days = (int) (time / (24 * 60 * 60 * 1000));
     // final int remainder = (int) (time % (24 * 60 * 60 * 1000));
-    final Tuple a         = civil_from_days(days);
+    final Tuple a = civil_from_days(days);
     set(YEAR, a.year);
     set(MONTH, a.month);
     set(DAY_OF_MONTH, a.day);

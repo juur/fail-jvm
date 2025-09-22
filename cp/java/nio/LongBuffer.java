@@ -19,6 +19,10 @@ public abstract class LongBuffer extends Buffer {
     return 0;
   }
 
+  public abstract long get();
+
+  public abstract long get(int index);
+
   @Override
   public boolean hasArray() {
     // TODO Auto-generated method stub
@@ -37,4 +41,7 @@ public abstract class LongBuffer extends Buffer {
     return false;
   }
 
+  public abstract LongBuffer put(int index, long l);
+
+  public abstract LongBuffer put(long l);
 }

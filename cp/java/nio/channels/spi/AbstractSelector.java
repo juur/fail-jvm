@@ -8,8 +8,8 @@ import java.util.Set;
 
 public abstract class AbstractSelector extends Selector {
 
-  private final SelectorProvider provider;
-  private final boolean          open;
+  private final SelectorProvider  provider;
+  private final boolean           open;
   private final Set<SelectionKey> keys;
   private final Set<SelectionKey> cancelledKeys;
   private boolean                 blockingIO;
@@ -22,14 +22,12 @@ public abstract class AbstractSelector extends Selector {
     cancelledKeys = new HashSet<SelectionKey>();
   }
 
-  protected final void begin()
-  {
+  protected final void begin() {
     blockingIO = true;
     // TODO
   }
 
-  protected final Set<SelectionKey> cancelledKeys()
-  {
+  protected final Set<SelectionKey> cancelledKeys() {
     return cancelledKeys();
   }
 
@@ -46,8 +44,7 @@ public abstract class AbstractSelector extends Selector {
     }
   }
 
-  protected final void end()
-  {
+  protected final void end() {
     blockingIO = false;
     // TODO
   }
@@ -60,12 +57,9 @@ public abstract class AbstractSelector extends Selector {
   }
 
   @Override
-  public final SelectorProvider provider()
-  {
+  public final SelectorProvider provider() {
     return provider;
   }
 
-  protected abstract SelectionKey register(AbstractSelectableChannel ch,
-    int ops,
-    Object att);
+  protected abstract SelectionKey register(AbstractSelectableChannel ch, int ops, Object att);
 }

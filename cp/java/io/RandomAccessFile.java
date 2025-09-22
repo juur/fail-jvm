@@ -1,23 +1,30 @@
 package java.io;
 
 import java.nio.channels.FileChannel;
+import java.nio.channels.ImplFileChannel;
 
 public class RandomAccessFile implements DataOutput, DataInput, Closeable {
 
-  private final File     file;
-  private final String   mode;
-  private FileDescriptor fd;
-  private FileChannel    fc;
+  private final File           file;
+  private final String         mode;
+  private final FileChannel    fc;
+  private final FileDescriptor fdObj;
 
-  public RandomAccessFile(final File nFile, final String nMode) {
+  public RandomAccessFile(final File nFile, final String nMode) throws FileNotFoundException, IOException {
     file = nFile;
     mode = nMode;
+    fdObj = new FileDescriptor(nFile);
+    fdObj.open(true);
+    fc = new ImplFileChannel(fdObj);
   }
 
-  public RandomAccessFile(final String name, final String nMode) throws FileNotFoundException {
+  public RandomAccessFile(final String name, final String nMode) throws IOException {
     if ((file = new File(name)) == null)
       throw new FileNotFoundException();
     mode = nMode;
+    fdObj = new FileDescriptor(file);
+    fdObj.open(true);
+    fc = new ImplFileChannel(fdObj);
   }
 
   @Override
@@ -31,7 +38,7 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
   }
 
   public final FileDescriptor getFD() throws IOException {
-    return fd;
+    return fdObj;
   }
 
   @Override

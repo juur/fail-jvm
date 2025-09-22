@@ -1,6 +1,5 @@
 package java.io;
 
-
 public interface ObjectOutput extends DataOutput {
 
   void close() throws IOException;

@@ -5,14 +5,12 @@ import java.net.ServerSocket;
 import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.SelectorProvider;
 
-
 public abstract class ServerSocketChannel extends AbstractSelectableChannel {
 
-  public static ServerSocketChannel open()
-    throws IOException
-  {
+  public static ServerSocketChannel open() throws IOException {
     final SelectorProvider defaultProvider = SelectorProvider.provider();
-    if (defaultProvider == null) throw new IOException();
+    if (defaultProvider == null)
+      throw new IOException();
     return defaultProvider.openServerSocketChannel();
   }
 

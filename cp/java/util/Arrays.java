@@ -139,6 +139,10 @@ public class Arrays {
 
   @SuppressWarnings("unchecked")
   public static <T> T[] copyOf(final T[] original, final int newLength) {
+    /*
+     * FIXME there is an issue with createClassForArray() ->class is not populated,
+     * so invokevirtual segfaults the getClass() here is probably the trigger
+     */
     return (T[]) copyOf(original, newLength, original.getClass());
   }
 

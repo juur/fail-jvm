@@ -125,7 +125,7 @@ public final class Character implements Serializable, Comparable<Character> {
   }
 
   public static boolean isDigit(final char ch) {
-    return isDigit((int)ch);
+    return isDigit((int) ch);
   }
 
   public static boolean isDigit(final int codePoint) {
@@ -180,7 +180,7 @@ public final class Character implements Serializable, Comparable<Character> {
      * TODO check 'type' is SPACE_SEPARATOR, LINE_SEPARATOR, or PARAGRAPH_SEPARATOR
      */
 
-    switch(codePoint) {
+    switch (codePoint) {
       case 0x00a0:
       case 0x2007:
       case 0x202f:

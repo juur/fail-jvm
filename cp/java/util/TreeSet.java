@@ -105,7 +105,12 @@ public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E> {
   }
 
   @Override
-  public NavigableSet<E> subSet(final E fromElement, final boolean fromInclusive, final E toElement, final boolean toInclusive) {
+  public NavigableSet<E> subSet(
+    final E fromElement,
+    final boolean fromInclusive,
+    final E toElement,
+    final boolean toInclusive
+  ) {
     // TODO Auto-generated method stub
     return null;
   }

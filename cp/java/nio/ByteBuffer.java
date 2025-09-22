@@ -13,7 +13,7 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
     if (capacity < 0)
       throw new IllegalArgumentException();
 
-    return new DirectRWByteBuffer(capacity);
+    return new DirectByteBuffer(capacity, false);
   }
 
   public static ByteBuffer wrap(final byte[] array) {
@@ -35,23 +35,28 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
 
   protected ByteBuffer(final int size, final boolean newHasArray, final int newArrayOffset, final byte[] newBuffer) {
     super(size);
+
     byteOrder = ByteOrder.BIG_ENDIAN;
     hasArray = newHasArray;
     arrayOffset = newArrayOffset;
-    buffer = newBuffer;
+
+    if (buffer == null)
+      buffer = new byte[size];
+    else
+      buffer = newBuffer;
   }
 
   @Override
   public final byte[] array() {
     if (hasArray())
-      return buffer;
+      return getBuffer();
     throw new UnsupportedOperationException();
   }
 
   @Override
   public final int arrayOffset() {
     if (hasArray())
-      return arrayOffset;
+      return getBufferOffset();
     throw new UnsupportedOperationException();
   }
 
@@ -191,14 +196,22 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
 
   public abstract ByteBuffer putInt(int index, int value);
 
-  public abstract ByteBuffer putLong(long value);
+  public abstract ByteBuffer putLong(int index, long value);
 
-  public abstract ByteBuffer putLong(long index, int value);
+  public abstract ByteBuffer putLong(long value);
 
   public abstract ByteBuffer putShort(int index, short value);
 
   public abstract ByteBuffer putShort(short value);
 
   public abstract ByteBuffer slice();
+
+  protected byte[] getBuffer() {
+    return buffer;
+  }
+
+  protected int getBufferOffset() {
+    return arrayOffset;
+  }
 
 }

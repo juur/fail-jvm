@@ -25,7 +25,7 @@ public class UTF_8 extends Charset {
           byte inch = in.get(in.position());
 
           if (inch < 0x80) {
-            //System.out.println("1: Got: " + (int) inch);
+            // System.out.println("1: Got: " + (int) inch);
             start = false;
             // Byte 1
             out.put((char) in.get());
@@ -45,7 +45,7 @@ public class UTF_8 extends Charset {
               if (in.remaining() < 4)
                 return CoderResult.UNDERFLOW;
 
-              //System.out.println("4: ");
+              // System.out.println("4: ");
 
               // Byte 1
               inch = in.get();
@@ -78,27 +78,27 @@ public class UTF_8 extends Charset {
 
               // Byte 1
               inch = in.get();
-              //System.out.println("3: Got: " + (int) inch);
+              // System.out.println("3: Got: " + (int) inch);
               tmp = (char) (inch & 0x0F);
               tmp <<= 6;
-              //System.out.println("3: now: " + tmp);
+              // System.out.println("3: now: " + tmp);
               // Byte 2
               inch = in.get();
-              //System.out.println("3: Got: " + (int) inch);
+              // System.out.println("3: Got: " + (int) inch);
               tmp |= (char) (inch & 0x7F);
               tmp <<= 6;
-              //System.out.println("3: now: " + tmp);
+              // System.out.println("3: now: " + tmp);
               // Byte 3
               inch = in.get();
-              //System.out.println("3: Got: " + (int) inch);
+              // System.out.println("3: Got: " + (int) inch);
               tmp |= (char) (inch & 0x7f);
-              //System.out.println("3: now: " + tmp);
+              // System.out.println("3: now: " + tmp);
               out.put((char) tmp);
             } else if ((inch & 0xE0) == 0xC0) {
               if (in.remaining() < 2)
                 return CoderResult.UNDERFLOW;
 
-              //System.out.println("2: ");
+              // System.out.println("2: ");
 
               // Byte 1
               inch = in.get();
@@ -171,6 +171,16 @@ public class UTF_8 extends Charset {
 
   @Override
   public boolean contains(final Charset cs) {
+    if (cs.getClass().equals(fail.cs.ASCII.class))
+      return true;
+    if (cs.getClass().equals(fail.cs.UTF_16.class))
+      return true;
+    if (cs.getClass().equals(fail.cs.UTF_16LE.class))
+      return true;
+    if (cs.getClass().equals(fail.cs.UTF_16BE.class))
+      return true;
+    if (cs.getClass().equals(fail.cs.ISO_8859_1.class))
+      return true;
     return false;
   }
 

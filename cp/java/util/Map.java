@@ -17,7 +17,7 @@ public interface Map<K, V> {
 
   public boolean containsValue(Object value);
 
-  public Set<Entry<K, V>> entrySet();
+  public Set<Map.Entry<K, V>> entrySet();
 
   public V get(Object key);
 

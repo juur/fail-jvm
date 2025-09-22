@@ -44,8 +44,7 @@ public final class StringBuilder implements Appendable, CharSequence {
   }
 
   @Override
-  public StringBuilder append(final CharSequence csq, final int start, final int end)
-    throws IOException {
+  public StringBuilder append(final CharSequence csq, final int start, final int end) throws IOException {
     if (csq == null)
       return append("null");
 
@@ -75,7 +74,6 @@ public final class StringBuilder implements Appendable, CharSequence {
     return append(a.toString());
   }
 
-
   public StringBuilder append(final String a) {
     if (a == null)
       return append("null");
@@ -87,24 +85,20 @@ public final class StringBuilder implements Appendable, CharSequence {
     return this;
   }
 
-
   @Override
   public char charAt(final int index) {
     return backing[index];
   }
-
 
   @Override
   public int length() {
     return ptr;
   }
 
-
   @Override
   public CharSequence subSequence(final int start, final int end) {
     return null;
   }
-
 
   @Override
   public String toString() {

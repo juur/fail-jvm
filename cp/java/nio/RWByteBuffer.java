@@ -7,7 +7,7 @@ final class RWByteBuffer extends ByteBuffer {
   }
 
   RWByteBuffer(final int size) {
-    super(size, true, 0, new byte[size]);
+    super(size, true, 0, null);
   }
 
   @Override
@@ -228,30 +228,26 @@ final class RWByteBuffer extends ByteBuffer {
   }
 
   @Override
+  public ByteBuffer putLong(final int index, final long value) {
+    // TODO Auto-generated method stub
+    return this;
+  }
+
+  @Override
   public ByteBuffer putLong(final long value) {
     // TODO Auto-generated method stub
     return this;
   }
-
-
-  @Override
-  public ByteBuffer putLong(final long index, final int value) {
-    // TODO Auto-generated method stub
-    return this;
-  }
-
 
   @Override
   public ByteBuffer putShort(final int index, final short value) {
     throw new UnsupportedOperationException();
   }
 
-
   @Override
   public ByteBuffer putShort(final short value) {
     throw new UnsupportedOperationException();
   }
-
 
   @Override
   public ByteBuffer slice() {

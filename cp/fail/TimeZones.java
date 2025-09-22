@@ -21,19 +21,19 @@ public abstract class TimeZones extends SimpleTimeZone {
 
       timeZoneIDs = zoneIDs;
     }
+    // return timeZoneIDs;
     return Arrays.copyOf(timeZoneIDs, timeZoneIDs.length);
   }
 
   public synchronized static TimeZone[] getTimeZones() {
     if (timeZones == null) {
-      final TimeZone[] zones = new SimpleTimeZone[] {
-        new SimpleTimeZone(0, "UTC"),
-        new SimpleTimeZone(0, "GMT"),
+      final TimeZone[] zones = new SimpleTimeZone[] { new SimpleTimeZone(0, "UTC"), new SimpleTimeZone(0, "GMT"),
         // new SimpleTimeZone(0, "Europe/London", Calendar.MARCH, -1, Calendar.SUNDAY,
         // 3600000, Calendar.OCTOBER, -1, Calendar.SUNDAY, 3600000)
       };
       timeZones = zones;
     }
+    // return timeZones;
     return Arrays.copyOf(timeZones, timeZones.length);
   }
 

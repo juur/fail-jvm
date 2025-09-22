@@ -20,7 +20,12 @@ public class ISO_8859_1 extends Charset {
       while (in.hasRemaining()) {
         if (out.position() < out.capacity()) {
           final byte inb = in.get();
-          out.put((char) inb);
+          if (inb < 0x7f)
+            out.put((char) inb);
+          // else if (map.containsKey(inb))
+          // out.put(map.get(inb));
+          else
+            out.put((char) inb);
         } else
           return CoderResult.OVERFLOW;
       }
@@ -55,7 +60,32 @@ public class ISO_8859_1 extends Charset {
 
   static {
     INSTANCE = new ISO_8859_1();
+    // map = Collections.unmodifiableMap(new HashMap<Byte, Character>() {
+    //
+    // {
+    // put((byte) 0xa0, ' ');
+    // put((byte) 0xa1, '¡');
+    // put((byte) 0xa2, '¢');
+    // put((byte) 0xa3, '£');
+    // put((byte) 0xa4, '¤');
+    // put((byte) 0xa5, '¥');
+    // put((byte) 0xa6, '¦');
+    // put((byte) 0xa7, '§');
+    // put((byte) 0xa8, '¨');
+    // put((byte) 0xa9, '©');
+    // put((byte) 0xaa, 'ª');
+    // put((byte) 0xab, '«');
+    // put((byte) 0xac, 'ª');
+    // put((byte) 0xad, '¬');
+    // put((byte) 0xae, '®');
+    // put((byte) 0xaf, '¯');
+    //
+    // put((byte) 0xff, 'ÿ');
+    // }
+    // });
   }
+
+  // private final static Map<Byte, Character> map;
 
   private ISO_8859_1() {
     super("ISO-8859-1", new String[] { "ISO-8859-1", "latin1", "CP819", "IBM819", "iso-r-100", "csISOLatin1", "l1" });
@@ -63,7 +93,7 @@ public class ISO_8859_1 extends Charset {
 
   @Override
   public boolean contains(final Charset cs) {
-    if (cs.name().equals("us-ascii"))
+    if (cs.getClass().equals(fail.cs.ASCII.class))
       return true;
     return false;
   }

@@ -11,11 +11,11 @@ public class Thread implements Runnable {
     void uncaughtException(Thread t, Throwable e);
   }
 
-  public static final int MAX_PRIORITY = 10;
+  public static final int MAX_PRIORITY  = 10;
   public static final int MIN_PRIORITY  = 1;
   public static final int NORM_PRIORITY = 5;
 
-  volatile private static int threadCount = 0;
+  volatile private static int threadCount     = 0;
   private static final Object threadCountLock = new Object();
 
   public static native Thread currentThread();
@@ -66,17 +66,21 @@ public class Thread implements Runnable {
     this(newGroup, null, "Thread" + threadCount++);
   }
 
-  public long getId() {
-    return getThreadId();
+  public ClassLoader getContextClassLoader() {
+    return null;
   }
 
-  public String getName() {
-    return name;
+  public long getId() {
+    return getThreadId();
   }
 
   // public State getState() {
   // return state;
   // }
+
+  public String getName() {
+    return name;
+  }
 
   @Override
   public void run() {

@@ -247,6 +247,8 @@ public class CP1252 extends Charset {
 
   @Override
   public boolean contains(final Charset cs) {
+    if (cs.getClass().equals(fail.cs.ASCII.class))
+      return true;
     return false;
   }
 

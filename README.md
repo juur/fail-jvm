@@ -23,6 +23,10 @@ Unimplemented instructions:
 * jsr
 * jsr\_w
 
+A major gap currently is that the classes generated for arrays do not work properly, this causes issues for things like Arrays.copyOf(T []);
+
+Attempting to execute Java bytecode for versions 9 and above will not work, as invokedynamic is not supported.
+
 ## The Java(R) Platform, Standard Edition 6, API Specification
 
 The following packages have some implemented classes based on the published API Specification:

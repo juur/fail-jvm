@@ -1,6 +1,5 @@
 package java.nio.channels;
 
-
 public abstract class SelectionKey {
 
   public static final int OP_ACCEPT  = 16;
@@ -13,15 +12,13 @@ public abstract class SelectionKey {
 
   }
 
-  public final Object attach(final Object ob)
-  {
+  public final Object attach(final Object ob) {
     final Object old = attached;
     attached = ob;
     return old;
   }
 
-  public final Object attachment()
-  {
+  public final Object attachment() {
     return attached;
   }
 
@@ -37,8 +34,7 @@ public abstract class SelectionKey {
     return (readyOps() & OP_ACCEPT) != 0;
   }
 
-  public final boolean isConnectable()
-  {
+  public final boolean isConnectable() {
     return (readyOps() & OP_CONNECT) != 0;
   }
 

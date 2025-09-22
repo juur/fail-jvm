@@ -4,7 +4,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.spi.AbstractInterruptibleChannel;
 
-public abstract class FileChannel extends AbstractInterruptibleChannel implements ByteChannel, GatheringByteChannel, ScatteringByteChannel {
+public abstract class FileChannel extends AbstractInterruptibleChannel
+  implements ByteChannel, GatheringByteChannel, ScatteringByteChannel {
 
   protected FileChannel() {
     super();

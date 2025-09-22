@@ -2,7 +2,6 @@ package java.nio.channels.spi;
 
 import java.nio.channels.SelectionKey;
 
-
 public abstract class AbstractSelectionKey extends SelectionKey {
 
   private boolean cancelled;
@@ -13,8 +12,7 @@ public abstract class AbstractSelectionKey extends SelectionKey {
   }
 
   @Override
-  public final void cancel()
-  {
+  public final void cancel() {
     if (cancelled)
       return;
     // TODO

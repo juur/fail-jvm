@@ -77,8 +77,7 @@ public class SimpleSocketImpl extends SocketImpl {
 
   private native void nativeClose(FileDescriptor fdObj) throws IOException;
 
-  private native void nativeConnect(FileDescriptor fdObj, char[] host, int newPort)
-    throws IOException;
+  private native void nativeConnect(FileDescriptor fdObj, char[] host, int newPort) throws IOException;
 
   private native void nativeCreate(boolean stream) throws IOException;
 

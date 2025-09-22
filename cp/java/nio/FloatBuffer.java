@@ -19,6 +19,10 @@ public abstract class FloatBuffer extends Buffer {
     return 0;
   }
 
+  public abstract float get();
+
+  public abstract float get(int index);
+
   @Override
   public boolean hasArray() {
     // TODO Auto-generated method stub
@@ -37,4 +41,7 @@ public abstract class FloatBuffer extends Buffer {
     return false;
   }
 
+  public abstract FloatBuffer put(float f);
+
+  public abstract FloatBuffer put(int index, float f);
 }

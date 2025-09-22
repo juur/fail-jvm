@@ -48,12 +48,12 @@ public class ZipEntry implements Cloneable {
   public static final int  STORED   = 0;
 
   final private String name;
-  private long             time     = -1;
-  private long             size     = -1;
-  private long             compSize = -1;
-  private long             crc      = -1;
-  private int              method   = -1;
-  private byte[]           extra    = null;
+  private long         time     = -1;
+  private long         size     = -1;
+  private long         compSize = -1;
+  private long         crc      = -1;
+  private int          method   = -1;
+  private byte[]       extra    = null;
   private String       comment;
 
   public ZipEntry(final String nName) {

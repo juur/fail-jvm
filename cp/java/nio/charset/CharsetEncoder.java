@@ -12,14 +12,19 @@ public abstract class CharsetEncoder {
   private byte[]            replacement;
   private CodingErrorAction unmappableCharacter;
 
-  protected CharsetEncoder(final Charset newCharset, final float newAverageBytesPerChar, final float newMaxBytesPerChar) {
+  protected CharsetEncoder(
+    final Charset newCharset, final float newAverageBytesPerChar, final float newMaxBytesPerChar
+  ) {
     this.cs = newCharset;
     this.averageBytesPerChar = newAverageBytesPerChar;
     this.maxBytesPerChar = newMaxBytesPerChar;
     replacement = new byte[] { (byte) '?' };
   }
 
-  protected CharsetEncoder(final Charset newCharset, final float newAverageBytesPerChar, final float newMaxBytesPerChar, final byte[] newReplacement) {
+  protected CharsetEncoder(
+    final Charset newCharset, final float newAverageBytesPerChar, final float newMaxBytesPerChar,
+    final byte[] newReplacement
+  ) {
     this(newCharset, newAverageBytesPerChar, newMaxBytesPerChar);
     this.replacement = newReplacement;
   }

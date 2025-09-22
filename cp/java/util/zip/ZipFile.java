@@ -8,7 +8,7 @@ import java.util.Enumeration;
 
 public class ZipFile {
 
-  public static final int  CENATT      = 36;
+  public static final int CENATT = 36;
 
   public static final int  CENATX      = 38;
   public static final int  CENCOM      = 32;
@@ -21,7 +21,7 @@ public class ZipFile {
   public static final int  CENLEN      = 24;
   public static final int  CENNAM      = 28;
   public static final int  CENOFF      = 42;
-  public static final long CENSIG      = 33639248L; // 0x2014B50
+  public static final long CENSIG      = 33639248L;  // 0x2014B50
   public static final int  CENSIZ      = 20;
   public static final int  CENTIM      = 12;
   public static final int  CENVEM      = 4;
@@ -45,7 +45,7 @@ public class ZipFile {
   public static final int  LOCHOW      = 8;
   public static final int  LOCLEN      = 22;
   public static final int  LOCNAM      = 26;
-  public static final long LOCSIG      = 67324752L; // 0x04034b50 or "PK\3\4"
+  public static final long LOCSIG      = 67324752L;  // 0x04034b50 or "PK\3\4"
   public static final int  LOCSIZ      = 18;
   public static final int  LOCTIM      = 10;
   public static final int  LOCVER      = 4;
@@ -53,8 +53,8 @@ public class ZipFile {
   public static final int  OPEN_READ   = 1;
 
   private final InputStream is;
-  private final int  mode;
-  private final File file;
+  private final int         mode;
+  private final File        file;
 
   public ZipFile(final File nFile) throws IOException {
     this(nFile, OPEN_READ);
@@ -97,7 +97,7 @@ public class ZipFile {
   }
 
   private long bytesToLong(final byte[] ba) {
-    long      value = 0;
+    long value = 0;
     int  off   = 0;
 
     for (final byte b : ba)
@@ -107,7 +107,7 @@ public class ZipFile {
   }
 
   private void parseFile() throws IOException {
-    final byte[] b4 = new byte [4];
+    final byte[] b4 = new byte[4];
 
     is.reset();
     is.read(b4);

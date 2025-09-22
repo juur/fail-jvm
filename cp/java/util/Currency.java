@@ -541,9 +541,7 @@ public class Currency {
   private final int    digits;
   private final String symbol;
 
-  private Currency(
-    final String newAlphaCode, final int newNumCode, final int newDigits, final String newSymbol
-    ) {
+  private Currency(final String newAlphaCode, final int newNumCode, final int newDigits, final String newSymbol) {
     alphaCode = newAlphaCode;
     numCode = newNumCode;
     digits = newDigits;

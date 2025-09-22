@@ -17,6 +17,10 @@ public class HashSet<E> extends AbstractSet<E> {
     }
   }
 
+  public HashSet(final int initial_size) {
+    hash = new HashMap<E, E>(initial_size);
+  }
+
   @Override
   public boolean add(final E e) {
     hash.put(e, e);
@@ -24,8 +28,32 @@ public class HashSet<E> extends AbstractSet<E> {
   }
 
   @Override
+  public boolean isEmpty() {
+    return hash.isEmpty();
+  }
+
+  @Override
   public Iterator<E> iterator() {
-    return hash.keySet().iterator();
+    return new Iterator<E>() {
+
+      @Override
+      public boolean hasNext() {
+        // TODO Auto-generated method stub
+        return false;
+      }
+
+      @Override
+      public E next() {
+        // TODO Auto-generated method stub
+        return null;
+      }
+
+      @Override
+      public void remove() {
+        // TODO Auto-generated method stub
+
+      }
+    };
   }
 
   @Override

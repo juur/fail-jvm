@@ -1,6 +1,5 @@
 package java.io;
 
-
 public interface DataOutput {
 
   void write(byte[] b) throws IOException;

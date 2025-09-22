@@ -1,6 +1,5 @@
 package java.io;
 
-
 public abstract class Writer implements Appendable, Closeable, Flushable {
 
   protected Object lock;
@@ -43,26 +42,26 @@ public abstract class Writer implements Appendable, Closeable, Flushable {
   @Override
   public abstract void flush() throws IOException;
 
-  void write(final char[] cbuf) throws IOException {
+  public void write(final char[] cbuf) throws IOException {
     write(cbuf, 0, cbuf.length);
   }
 
-  abstract void write(char[] cbuf, int off, int len) throws IOException;
+  public abstract void write(char[] cbuf, int off, int len) throws IOException;
 
   /**
    * @throws IOException
    */
-  void write(final int c) throws IOException {
+  public void write(final int c) throws IOException {
     final char[] cbuf = new char[1];
     cbuf[0] = (char) c;
     write(cbuf);
   }
 
-  void write(final String str) throws IOException {
+  public void write(final String str) throws IOException {
     write(str.toCharArray());
   }
 
-  void write(final String str, final int off, final int len) throws IOException {
+  public void write(final String str, final int off, final int len) throws IOException {
     write(str.toCharArray(), off, len);
   }
 }

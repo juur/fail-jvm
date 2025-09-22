@@ -1,6 +1,5 @@
 package java.lang;
 
-
 public final class Compiler {
 
   native public static Object command(Object any);

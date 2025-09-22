@@ -21,14 +21,14 @@ public abstract class AbstractQueue<E> extends AbstractCollection<E> implements 
 
   @Override
   public E element() {
-    if (isEmtpy())
+    if (isEmpty())
       throw new NoSuchElementException();
     return peek();
   }
 
   @Override
   public E remove() {
-    if (isEmtpy())
+    if (isEmpty())
       throw new NoSuchElementException();
     return poll();
   }

@@ -155,7 +155,12 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
   }
 
   @Override
-  public NavigableMap<K, V> subMap(final K fromKey, final boolean fromInclusive, final K toKey, final boolean toInclusive) {
+  public NavigableMap<K, V> subMap(
+    final K fromKey,
+    final boolean fromInclusive,
+    final K toKey,
+    final boolean toInclusive
+  ) {
     // TODO Auto-generated method stub
     return null;
   }
